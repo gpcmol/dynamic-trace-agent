@@ -1,0 +1,34 @@
+# OpenTelemetry Operator: inject the Java agent plus this extension into annotated pods.
+# Pin the agent image to a version from the CI matrix (.github/workflows/ci.yml) — never :latest:
+# the extension uses agent-internal APIs (docs/03-classloaders.md).
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: otel-instrumentation
+spec:
+  exporter:
+    endpoint: http://opentelemetry-collector.telemetry.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1"
+  java:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.30.0
+    extensions:
+      - image: ghcr.io/gpcmol/dynamic-trace-agent:snapshot   # use a released vX.Y.Z tag in production
+        dir: /extensions
+    resources:          # resources of the copy init container, not of the application
+      limits:
+        cpu: 500m
+        memory: 64Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    env:
+      - name: OTEL_METRICS_EXPORTER
+        value: none
+      # Turn on for troubleshooting only: it also makes the OTel agent log every span.
+      # - name: OTEL_JAVAAGENT_DEBUG
+      #   value: "true"

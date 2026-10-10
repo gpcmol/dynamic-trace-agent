@@ -1,0 +1,60 @@
+name: Release after merge
+
+# When a pull request is merged into master: bump the patch version (0.1.3 → 0.1.4), build and test
+# the release, commit the version and push tag vX.Y.Z. The tag triggers "Publish image".
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.GHCR_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Bump the patch version
+        id: bump
+        run: |
+          set -euo pipefail
+          CURRENT="$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          CURRENT="${CURRENT%-SNAPSHOT}"
+          if [[ ! "$CURRENT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid current version: $CURRENT"
+            exit 1
+          fi
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          mvn -B -q versions:set -DnewVersion="$NEW_VERSION" -DgenerateBackupPoms=false
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Bumped ${CURRENT} -> ${NEW_VERSION}"
+
+      - name: Build and test the release
+        run: mvn -B verify
+
+      - name: Commit, tag and push
+        run: |
+          set -euo pipefail
+          NEW_VERSION="${{ steps.bump.outputs.new_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): v${NEW_VERSION}"
+          git tag "v${NEW_VERSION}"
+          git push origin HEAD:master
+          git push origin "v${NEW_VERSION}"

@@ -1,0 +1,118 @@
+package org.otel.agent.core.path;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.otel.agent.core.naming.JavaNames;
+
+/**
+ * Turns path text into a {@link CompiledPath}.
+ *
+ * <pre>
+ * path     := root ( '.' segment )*
+ * root     := '$this' | '$return' | '$arg' N        N = 0..127, no leading zeros
+ * segment  := identifier ( '[' index ']' )?         index = decimal int &gt;= 0
+ * </pre>
+ *
+ * Attribute paths need at least one segment; condition references may be a bare root ({@code
+ * $return == null}).
+ */
+public final class PathCompiler {
+
+  private PathCompiler() {}
+
+  /** A path for {@code <attribute path="…">}: root plus at least one property. */
+  public static CompiledPath attributePath(final String text) throws InvalidPathException {
+    final CompiledPath path = compile(text);
+    if (path.segments().isEmpty()) {
+      throw new InvalidPathException(text, "a property is required after " + path.root());
+    }
+    return path;
+  }
+
+  /** A reference used in a condition: a root, optionally followed by properties. */
+  public static CompiledPath reference(final String text) throws InvalidPathException {
+    return compile(text);
+  }
+
+  private static CompiledPath compile(final String text) throws InvalidPathException {
+    if (text == null || text.isEmpty()) {
+      throw new InvalidPathException(String.valueOf(text), "path is empty");
+    }
+    final String[] parts = text.split("\\.", -1);
+    final PathRoot root = parseRoot(text, parts[0]);
+    final List<PathSegment> segments = new ArrayList<>(parts.length - 1);
+    for (int i = 1; i < parts.length; i++) {
+      segments.add(parseSegment(text, parts[i]));
+    }
+    return new CompiledPath(root, segments);
+  }
+
+  private static PathRoot parseRoot(final String text, final String token)
+      throws InvalidPathException {
+    switch (token) {
+      case "$this":
+        return PathRoot.THIS;
+      case "$return":
+        return PathRoot.RETURN;
+      default:
+        break;
+    }
+    if (!token.startsWith("$arg")) {
+      throw new InvalidPathException(text, "must start with $this, $return or $argN");
+    }
+    final String digits = token.substring("$arg".length());
+    if (!isCanonicalNumber(digits)) {
+      throw new InvalidPathException(
+          text, "'" + token + "' needs an argument number such as $arg0");
+    }
+    if (digits.length() > 3 || Integer.parseInt(digits) > PathRoot.MAX_ARGUMENT_INDEX) {
+      throw new InvalidPathException(
+          text, "argument index must be 0.." + PathRoot.MAX_ARGUMENT_INDEX);
+    }
+    return new PathRoot.Argument(Integer.parseInt(digits));
+  }
+
+  private static PathSegment parseSegment(final String text, final String token)
+      throws InvalidPathException {
+    if (token.isEmpty()) {
+      throw new InvalidPathException(text, "empty segment");
+    }
+    final int open = token.indexOf('[');
+    if (open < 0) {
+      requireIdentifier(text, token);
+      return PathSegment.property(token);
+    }
+    final String property = token.substring(0, open);
+    requireIdentifier(text, property);
+    if (!token.endsWith("]") || token.indexOf('[', open + 1) >= 0) {
+      throw new InvalidPathException(text, "malformed index in '" + token + "'");
+    }
+    final String digits = token.substring(open + 1, token.length() - 1);
+    if (!isCanonicalNumber(digits) || digits.length() > 9) {
+      throw new InvalidPathException(
+          text, "index in '" + token + "' must be a number 0..999999999");
+    }
+    return PathSegment.indexed(property, Integer.parseInt(digits));
+  }
+
+  private static void requireIdentifier(final String text, final String property)
+      throws InvalidPathException {
+    if (!JavaNames.isIdentifier(property)) {
+      throw new InvalidPathException(text, "'" + property + "' is not a valid property name");
+    }
+  }
+
+  /** ASCII digits only, no sign, no leading zeros (except "0" itself). */
+  private static boolean isCanonicalNumber(final String digits) {
+    if (digits.isEmpty() || (digits.length() > 1 && digits.charAt(0) == '0')) {
+      return false;
+    }
+    for (int i = 0; i < digits.length(); i++) {
+      final char c = digits.charAt(i);
+      if (c < '0' || c > '9') {
+        return false;
+      }
+    }
+    return true;
+  }
+}

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.otel.agent</groupId>
+    <artifactId>dynamic-trace-agent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>dta-integration-tests</artifactId>
+  <name>dta-integration-tests</name>
+  <description>End-to-end tests: the garage app with the real OpenTelemetry Java agent
+    (${otel.agent.version}) and the packaged extension, exporting to an in-test OTLP receiver.
+    Select another agent with -Dotel.agent.version=… (CI matrix).</description>
+
+  <dependencies>
+    <!-- Build order only: the tests use the packaged jars of these modules. -->
+    <dependency>
+      <groupId>org.otel.agent</groupId>
+      <artifactId>dta-extension</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.otel.agent</groupId>
+      <artifactId>dta-example-app</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>io.opentelemetry.proto</groupId>
+      <artifactId>opentelemetry-proto</artifactId>
+      <version>1.10.0-alpha</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>4.35.1</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-otel-agent</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>io.opentelemetry.javaagent</groupId>
+                  <artifactId>opentelemetry-javaagent</artifactId>
+                  <version>${otel.agent.version}</version>
+                  <destFileName>opentelemetry-javaagent.jar</destFileName>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.build.directory}/agent</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <it.agent.jar>${project.build.directory}/agent/opentelemetry-javaagent.jar</it.agent.jar>
+            <it.extension.jar>${project.basedir}/../dta-extension/target/dynamic-trace-agent.jar</it.extension.jar>
+            <it.app.jar>${project.basedir}/../dta-example-app/target/garage.jar</it.app.jar>
+            <it.reference.config>${project.basedir}/../config/agent-config.xml</it.reference.config>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,7 @@
+.git
+.idea
+**/target
+benchmarks
+docs
+openspec
+deploy

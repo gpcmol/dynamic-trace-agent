@@ -1,0 +1,31 @@
+<configuration>
+    <static>
+        <attribute key="debug" value="true"/>
+        <attribute key="domain" value="cars"/>
+        <attribute key="team" value="winning"/>
+        <attribute key="environment" value="production"/>
+        <attribute key="region" value="eu-west"/>
+        <attribute key="service" value="garage"/>
+    </static>
+    <dynamic>
+        <rule>
+            <selector>
+                <class name="com.example.Garage"/>
+                <method name="park"/>
+            </selector>
+            <when>$arg0.brand in ['bmw', 'audi', 'vw', 'mercedes', 'toyota', 'honda', 'ford', 'renault'] and $arg0.mileage gt 0</when>
+            <attribute key="brand" path="$arg0.brand"/>
+            <attribute key="model" path="$arg0.model"/>
+            <attribute key="year" path="$arg0.year"/>
+            <attribute key="color" path="$arg0.color"/>
+            <attribute key="licensePlate" path="$arg0.licensePlate"/>
+            <attribute key="vin" path="$arg0.vin"/>
+            <attribute key="mileage" path="$arg0.mileage"/>
+            <attribute key="fuelType" path="$arg0.fuelType"/>
+            <attribute key="transmission" path="$arg0.transmission"/>
+            <attribute key="passengers" path="$arg0.passengers[1].name"/>
+            <attribute key="accepted" path="$return.accepted"/>
+            <attribute key="status" path="$return.status"/>
+        </rule>
+    </dynamic>
+</configuration>
