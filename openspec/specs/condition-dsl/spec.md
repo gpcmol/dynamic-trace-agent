@@ -61,9 +61,13 @@ and never reach the application.
 
 ### Requirement: Invalid expression disables the rule
 The agent SHALL disable the entire rule when its expression fails to parse or type-check
-(`syntax error`, `type mismatch`, `unknown function`, `unknown property`, `erased collection type`,
+(`syntax error` — including an expression that is too long or nested too deep —, `type mismatch`, `unknown function`, `unknown property`, `erased collection type`,
 `map unsupported`, `wrong arity`) and SHALL report the failure once with rule location and
 category. The rest of the configuration SHALL remain active.
+
+#### Scenario: Deeply nested expression
+- **WHEN** a `<when>` is longer than 4 096 characters or nests deeper than 64 levels
+- **THEN** it is a `syntax error`: the rule is disabled with one warning and no thread runs out of stack
 
 #### Scenario: Typo in condition
 - **WHEN** a rule's `<when>` references an unknown property

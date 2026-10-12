@@ -2,8 +2,10 @@ name: CI
 
 # Every push and pull request: full build with all quality gates, unit, architecture, memory and
 # end-to-end tests, the latter against every supported OpenTelemetry agent version (spec
-# packaging-and-distribution, "Supported OTel agent versions"). Branch pushes then publish the
-# mutable "snapshot" image; pull requests only build it.
+# packaging-and-distribution, "Supported OTel agent versions"). Branch pushes then publish a snapshot
+# image: every run gets the next patch version (0.1.4-SNAPSHOT, 0.1.5-SNAPSHOT, ...) and the mutable
+# "snapshot" tag moves to it. The release after a merge takes the number of the newest snapshot
+# (release.yml). Pull requests only build the image.
 
 on:
   workflow_dispatch:
@@ -19,12 +21,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: the build job runs the code of a pull request and only needs to read it.
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/gpcmol/dynamic-trace-agent
+  PACKAGE: dynamic-trace-agent
 
 jobs:
   build:
@@ -50,6 +53,12 @@ jobs:
   snapshot-image:
     needs: build
     runs-on: ubuntu-latest
+    # One at a time over all branches: two runs must not take the same version number.
+    concurrency:
+      group: snapshot-version
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -63,12 +72,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      # Highest X.Y.Z of the pom, the released images (X.Y.Z) and the earlier snapshots
+      # (X.Y.Z-SNAPSHOT) in the registry, plus one patch version.
+      - name: Next snapshot version
+        id: version
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          TAGS="$(gh api --paginate "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq '.[].metadata.container.tags[]' || true)" # fails when no image exists yet
+          VERSION="$({ sed -n 's|^  <version>\(.*\)</version>|\1|p' pom.xml; echo "$TAGS"; } \
+            | sed -nE 's/^v?([0-9]+\.[0-9]+\.[0-9]+)(-SNAPSHOT)?$/\1/p' | sort -V | tail -n 1 \
+            | awk -F. '{ print $1 "." $2 "." $3 + 1 "-SNAPSHOT" }')"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build snapshot image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
-          tags: ${{ env.IMAGE }}:snapshot
+          tags: |
+            ${{ env.IMAGE }}:snapshot
+            ${{ steps.version.outputs.version && format('{0}:{1}', env.IMAGE, steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

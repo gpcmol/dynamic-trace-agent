@@ -1,9 +1,10 @@
 package org.otel.agent.extension.instrument;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Assigns a constant {@code site} id to every instrumented method; the id is baked into the advice
@@ -15,8 +16,6 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
  */
 public final class SiteRegistry {
 
-  private static final int CHUNK = 256;
-
   /** Where a site is: declaring class name, method name and JVM descriptor. */
   public record SiteInfo(String className, String methodName, String descriptor) {
     public SiteInfo {
@@ -26,9 +25,10 @@ public final class SiteRegistry {
     }
   }
 
-  private static final ConcurrentHashMap<SiteInfo, Integer> IDS = new ConcurrentHashMap<>();
-  private static final AtomicInteger NEXT = new AtomicInteger();
-  private static volatile AtomicReferenceArray<SiteInfo> sites = new AtomicReferenceArray<>(CHUNK);
+  private static final Map<SiteInfo, Integer> IDS = new ConcurrentHashMap<>();
+
+  /** Index = site id. Only grows; written at transform time, read when a class is bound. */
+  private static final List<SiteInfo> SITES = new CopyOnWriteArrayList<>();
 
   private SiteRegistry() {}
 
@@ -39,23 +39,11 @@ public final class SiteRegistry {
 
   /** The method behind a site id, or {@code null} for an unknown id. */
   public static SiteInfo info(final int site) {
-    final AtomicReferenceArray<SiteInfo> current = sites;
-    return site >= 0 && site < current.length() ? current.get(site) : null;
+    return site >= 0 && site < SITES.size() ? SITES.get(site) : null;
   }
 
   private static synchronized int register(final SiteInfo info) {
-    final int site = NEXT.getAndIncrement();
-    AtomicReferenceArray<SiteInfo> current = sites;
-    if (site >= current.length()) {
-      final AtomicReferenceArray<SiteInfo> grown =
-          new AtomicReferenceArray<>(current.length() + CHUNK);
-      for (int i = 0; i < current.length(); i++) {
-        grown.set(i, current.get(i));
-      }
-      current = grown;
-    }
-    current.set(site, info);
-    sites = current;
-    return site;
+    SITES.add(info);
+    return SITES.size() - 1;
   }
 }

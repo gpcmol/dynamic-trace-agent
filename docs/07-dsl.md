@@ -67,6 +67,10 @@ A predicate without operator (`$arg0.electric`) must be boolean and means `== tr
 
 Keywords are lowercase and case-sensitive.
 
+Limits: an expression is at most 4 096 characters and nests at most 64 levels deep (parentheses,
+`not`, function calls, and the operators of one arithmetic chain). Beyond that it is a
+`syntax error`. `and`/`or` lists and `in [ … ]` lists do not count as nesting.
+
 ---
 
 ## 3. Types
@@ -135,10 +139,10 @@ active. One warning names the rule and the category:
 
 | Category | Typical cause |
 |---|---|
-| `syntax error` | unclosed parenthesis or string, `&&`, unknown character, invalid path |
+| `syntax error` | unclosed parenthesis or string, `&&`, unknown character, invalid path, too long or nested too deep |
 | `type mismatch` | `$arg0.brand == 42`, `$arg0.mileage gt 1.5`, non-boolean used as condition |
 | `unknown function` | `length($arg0.brand)` |
-| `unknown property` | `$arg0.colour` when `Car` has no `getColour()`/`isColour()`/`colour` |
+| `unknown property` | `$arg0.colour` when `Car` has no `getColour()`/`isColour()`/`colour`; a property of a protected JDK type ([06-config-xml.md](06-config-xml.md) §6) |
 | `erased collection type` | `$arg0.passengers[1].name` — element type of a generic `List` is unknown |
 | `map unsupported` | `$arg0.labels.key` when `labels` is a `Map` |
 | `wrong arity` | `size(a, b)`, `like(a)` |

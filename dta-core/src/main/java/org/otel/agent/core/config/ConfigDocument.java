@@ -21,11 +21,6 @@ public record ConfigDocument(
     ignoredRules = List.copyOf(ignoredRules);
   }
 
-  /** {@code true} when the document selects nothing — an explicit "disable". */
-  public boolean isEmpty() {
-    return rules.isEmpty();
-  }
-
   /** A static attribute: {@code <static><attribute key="…" value="…"/></static>}. */
   public record StaticAttribute(String key, String value) {
     public StaticAttribute {

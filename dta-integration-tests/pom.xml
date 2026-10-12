@@ -32,13 +32,11 @@
     <dependency>
       <groupId>io.opentelemetry.proto</groupId>
       <artifactId>opentelemetry-proto</artifactId>
-      <version>1.10.0-alpha</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>4.35.1</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

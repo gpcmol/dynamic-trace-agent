@@ -72,7 +72,7 @@ class XmlConfigurationParserTest {
     void emptyConfigurationMeansDisable() throws Exception {
       final ConfigDocument document = parse("<configuration/>");
 
-      assertTrue(document.isEmpty());
+      assertTrue(document.rules().isEmpty());
       assertTrue(document.staticAttributes().isEmpty());
     }
 
@@ -175,7 +175,7 @@ class XmlConfigurationParserTest {
 
     @Test
     void xmlCommentsAreAllowed() throws Exception {
-      assertTrue(parse("<configuration><!-- nothing yet --></configuration>").isEmpty());
+      assertTrue(parse("<configuration><!-- nothing yet --></configuration>").rules().isEmpty());
     }
   }
 
@@ -455,6 +455,16 @@ class XmlConfigurationParserTest {
               .formatted(key));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"line&#10;break", "tab&#9;", "c1&#x85;", "esc&#x9b;[31m"})
+    void keyWithControlCharacter(final String key) {
+      assertTrue(
+          rejected(
+                  rule(GARAGE_SELECTOR + "<attribute key=\"%s\" path=\"$this.a\"/>".formatted(key)))
+              .getMessage()
+              .contains("control characters"));
+    }
+
     @Test
     void sameSelectorTwiceInOneRule() {
       assertTrue(
@@ -496,6 +506,8 @@ class XmlConfigurationParserTest {
           "jdk.internal.Foo",
           "sun.misc.Unsafe",
           "com.sun.net.httpserver.HttpServer",
+          "org.w3c.dom.Node",
+          "org.xml.sax.XMLReader",
           "io.opentelemetry.api.trace.Span",
           "net.bytebuddy.ByteBuddy",
           "org.otel.agent.gateway.EnrichmentGateway"
@@ -544,6 +556,57 @@ class XmlConfigurationParserTest {
 <selector><class name="javaapp.Main"/><method name="run"/></selector>"""));
 
       assertEquals(1, document.rules().size());
+    }
+  }
+
+  /** The document is data: nothing in it can reach outside the parser or be executed. */
+  @Nested
+  class Injection {
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = {
+          "<!DOCTYPE configuration [<!ENTITY x SYSTEM \"file:///etc/passwd\">]>"
+              + "<configuration><static><attribute key=\"k\" value=\"&x;\"/></static></configuration>",
+          "<!DOCTYPE configuration [<!ENTITY a \"aaaa\"><!ENTITY b \"&a;&a;&a;&a;\">]>"
+              + "<configuration/>",
+          "<!DOCTYPE configuration SYSTEM \"http://127.0.0.1:1/x.dtd\"><configuration/>",
+          "<configuration xmlns:xi=\"http://www.w3.org/2001/XInclude\">"
+              + "<xi:include href=\"file:///etc/passwd\" parse=\"text\"/></configuration>",
+          "<?xml-stylesheet href=\"file:///etc/passwd\"?><configuration"
+              + " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
+              + " xsi:schemaLocation=\"http://127.0.0.1:1/x.xsd\"/>",
+          "<configuration><static><attribute key=\"k\" value=\"&undefined;\"/></static>"
+              + "</configuration>"
+        })
+    void entitiesIncludesAndSchemasAreRejected(final String xml) {
+      rejected(xml);
+    }
+
+    @Test
+    void classNamesAndMethodNamesAreNamesOnly() {
+      rejected(
+          dynamic(
+              "<rule><selector><class name=\"java.lang.Runtime.getRuntime()\"/>"
+                  + "<method name=\"park\"/></selector></rule>"));
+      rejected(
+          dynamic(
+              "<rule><selector><class name=\"com.example.Garage\"/>"
+                  + "<method name=\"park();exit\"/></selector></rule>"));
+    }
+
+    @Test
+    void markupInsideAValueStaysText() throws Exception {
+      final ConfigDocument document =
+          parse(
+              "<configuration><static>"
+                  + "<attribute key=\"k\" value=\"&lt;rule&gt;${jndi:ldap://x} $(id) `id`\"/>"
+                  + "</static></configuration>");
+
+      assertEquals(
+          new StaticAttribute("k", "<rule>${jndi:ldap://x} $(id) `id`"),
+          document.staticAttributes().get(0));
+      assertTrue(document.rules().isEmpty());
     }
   }
 }

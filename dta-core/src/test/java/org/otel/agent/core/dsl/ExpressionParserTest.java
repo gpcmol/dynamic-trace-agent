@@ -3,11 +3,13 @@ package org.otel.agent.core.dsl;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.otel.agent.core.dsl.ConditionException.Category;
 import org.otel.agent.core.dsl.Expression.And;
 import org.otel.agent.core.dsl.Expression.Comparison;
@@ -154,5 +156,35 @@ $arg0.brand in ['bmw', "audi", null]"""));
     final ConditionException exception = assertThrows(ConditionException.class, () -> parse(text));
 
     assertEquals(category, exception.category(), exception.getMessage());
+  }
+
+  @Test
+  void nestingUpToTheLimitIsAccepted() throws Exception {
+    final int depth = ExpressionParser.MAX_DEPTH;
+
+    parse("not ".repeat(depth) + "$arg0.x");
+    parse("(".repeat(depth) + "$arg0.x" + ")".repeat(depth));
+    parse("$arg0.x" + " + 1".repeat(depth) + " gt 0");
+    parse("$arg0.a in [" + "1, ".repeat(500) + "1] and " + "$arg0.b or ".repeat(200) + "true");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"not ", "(", "size(", "1 + ", "1 * ", "(1 + "})
+  void nestingBeyondTheLimitIsASyntaxErrorNotAStackOverflow(final String opening) {
+    final String text = opening.repeat(ExpressionParser.MAX_DEPTH + 1) + "$arg0.x";
+
+    final ConditionException exception = assertThrows(ConditionException.class, () -> parse(text));
+
+    assertEquals(Category.SYNTAX_ERROR, exception.category());
+    assertTrue(exception.getMessage().contains("nested deeper"), exception.getMessage());
+  }
+
+  @Test
+  void overlongExpressionIsRejected() {
+    final String text = "$arg0.x or ".repeat(ExpressionParser.MAX_LENGTH / 10) + "$arg0.x";
+
+    final ConditionException exception = assertThrows(ConditionException.class, () -> parse(text));
+
+    assertTrue(exception.getMessage().contains("longer than"), exception.getMessage());
   }
 }

@@ -19,6 +19,9 @@ import org.otel.agent.core.naming.JavaNames;
  * selector on a protected namespace) are returned as {@link IgnoredRule}s. Paths and conditions are
  * kept as text here; they are compiled later. The format is described in {@code
  * docs/06-config-xml.md}.
+ *
+ * <p>The document is operator input and is treated as data only: it is parsed by {@link
+ * SecureXmlReader}, every name is validated, and nothing in it is ever executed.
  */
 public final class XmlConfigurationParser {
 
@@ -140,6 +143,10 @@ public final class XmlConfigurationParser {
     if (key.length() > MAX_KEY_LENGTH) {
       throw new ConfigurationException(
           location + ": attribute key is longer than " + MAX_KEY_LENGTH + " characters");
+    }
+    if (key.chars().anyMatch(Character::isISOControl)) {
+      throw new ConfigurationException(
+          location + ": an attribute key must not contain control characters");
     }
     if (!keys.add(key)) {
       throw new ConfigurationException(

@@ -61,7 +61,10 @@ class PathCompilerTest {
         "$this.items[a]",
         "$this.items[9999999999]",
         "$this.1brand",
-        "$this.bra nd"
+        "$this.bra nd",
+        "$this.class",
+        "$this.class.classLoader",
+        "$arg0.owner.class.name"
       })
   void rejectsInvalidPaths(final String text) {
     assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath(text));
@@ -73,5 +76,13 @@ class PathCompilerTest {
         assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath("$arg0..x"));
 
     assertTrue(exception.getMessage().contains("'$arg0..x'"));
+  }
+
+  @Test
+  void pathLengthIsLimited() throws Exception {
+    final String longest = "$this" + ".a".repeat(PathCompiler.MAX_SEGMENTS);
+
+    assertEquals(PathCompiler.MAX_SEGMENTS, PathCompiler.attributePath(longest).segments().size());
+    assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath(longest + ".a"));
   }
 }

@@ -1,6 +1,7 @@
 package org.otel.agent.extension.engine;
 
 import java.lang.reflect.Method;
+import org.otel.agent.core.binding.ClassHierarchy;
 import org.otel.agent.extension.instrument.SiteRegistry.SiteInfo;
 
 /** Finds the {@link Method} behind a site id in the hierarchy of a runtime class. Cold path. */
@@ -8,19 +9,13 @@ final class MethodResolver {
 
   private MethodResolver() {}
 
-  /** The declared method named by {@code site} in {@code type} or a superclass, or {@code null}. */
+  /**
+   * The method named by {@code site}, declared in {@code type}, a superclass or an interface
+   * (default method) of its hierarchy; {@code null} if there is none.
+   */
   static Method resolve(final Class<?> type, final SiteInfo site) {
-    for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-      if (current.getName().equals(site.className())) {
-        return declaredMethod(current, site);
-      }
-    }
-    for (final Class<?> candidate : type.getInterfaces()) {
-      if (candidate.getName().equals(site.className())) {
-        return declaredMethod(candidate, site);
-      }
-    }
-    return null;
+    final Class<?> declaring = ClassHierarchy.byName(type).get(site.className());
+    return declaring == null ? null : declaredMethod(declaring, site);
   }
 
   private static Method declaredMethod(final Class<?> type, final SiteInfo site) {

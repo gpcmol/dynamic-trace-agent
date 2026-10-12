@@ -1,7 +1,8 @@
 name: Publish image
 
-# Every vX.Y.Z tag: push the extension image with the version tag and "latest", then keep only the
-# five newest release versions in GHCR. The "snapshot" tag is managed by CI and not touched here.
+# Every git tag vX.Y.Z: push the extension image as X.Y.Z (no "v") and "latest", then keep only the
+# five newest release versions and the five newest snapshot versions (X.Y.Z-SNAPSHOT, pushed by CI)
+# in GHCR.
 
 on:
   push:
@@ -31,6 +32,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Image version (the git tag without "v")
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -38,28 +43,31 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Keep only the latest five releases
+      - name: Keep only the latest five releases and snapshots
         env:
           GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          RELEASES="$(gh api --paginate \
+          TAGGED="$(gh api --paginate \
             "/users/${OWNER}/packages/container/${PACKAGE}/versions?per_page=100" \
-            --jq '.[] | [.id, (.metadata.container.tags[]? // "")] | @tsv' \
-            | awk -F '\t' '$2 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ { print $1 "\t" $2 }' \
-            | sort -t $'\t' -k2,2Vr)"
-          KEEP_IDS="$(printf '%s\n' "$RELEASES" | head -n 5 | cut -f1 | sort -u)"
-          ALL_IDS="$(printf '%s\n' "$RELEASES" | cut -f1 | sort -u)"
-          while IFS= read -r VERSION_ID; do
-            [[ -z "$VERSION_ID" ]] && continue
-            if ! grep -Fxq "$VERSION_ID" <<< "$KEEP_IDS"; then
-              echo "Deleting old release package version ${VERSION_ID}"
-              gh api --method DELETE "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VERSION_ID}"
-            fi
-          done <<< "$ALL_IDS"
+            --jq '.[] | .id as $id | .metadata.container.tags as $tags | $tags[] | [$id, ., ($tags | length)] | @tsv')"
+          for PATTERN in '^v?[0-9]+[.][0-9]+[.][0-9]+$' '^[0-9]+[.][0-9]+[.][0-9]+-SNAPSHOT$'; do
+            VERSIONS="$(awk -F '\t' -v pattern="$PATTERN" '$2 ~ pattern' <<< "$TAGGED" \
+              | sort -t $'\t' -k2,2Vr)"
+            KEEP_IDS="$(head -n 5 <<< "$VERSIONS" | cut -f1 | sort -u)"
+            # Never delete an image that carries another tag as well (latest, snapshot).
+            ALL_IDS="$(awk -F '\t' '$3 == 1' <<< "$VERSIONS" | cut -f1 | sort -u)"
+            while IFS= read -r VERSION_ID; do
+              [[ -z "$VERSION_ID" ]] && continue
+              if ! grep -Fxq "$VERSION_ID" <<< "$KEEP_IDS"; then
+                echo "Deleting old package version ${VERSION_ID}"
+                gh api --method DELETE "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VERSION_ID}"
+              fi
+            done <<< "$ALL_IDS"
+          done

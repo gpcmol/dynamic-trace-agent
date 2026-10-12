@@ -28,3 +28,12 @@ Logs SHALL NOT contain resolved attribute values.
 - **WHEN** enrichment runs in debug mode
 - **THEN** log lines contain rule identity and counts only, not values
 
+### Requirement: Log messages cannot be forged
+Text taken from the configuration file (keys, paths, conditions, names) SHALL reach the log only
+with control characters, line separators and invisible formatting characters escaped, and messages
+SHALL be limited in length.
+
+#### Scenario: Line break in a quoted path
+- **WHEN** a rejected document has a path containing a line break followed by text that looks like
+  a log line
+- **THEN** the warning is written as one line with the line break shown as an escape

@@ -28,10 +28,6 @@ public record CompiledRule(
     attributes = List.copyOf(attributes);
   }
 
-  public String describe() {
-    return definition.describe();
-  }
-
   /** {@code <attribute key="…" path="…"/>} with its path compiled. */
   public record CompiledAttribute(String key, CompiledPath path) {
     public CompiledAttribute {

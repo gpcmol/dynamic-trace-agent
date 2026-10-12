@@ -20,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * reference (application class → reader) lets application classloaders be garbage-collected; see
  * {@code docs/03-classloaders.md} §7 and spike S5. Maps, static members and arbitrary methods are
  * not supported.
+ *
+ * <p>Security: {@link ForbiddenTypes} have no properties, and {@code class} ({@code getClass()}) is
+ * never a property.
  */
 public final class PropertyAccessors {
 
@@ -46,6 +49,9 @@ public final class PropertyAccessors {
    * exist. Uses the same discovery order as {@link #reader}.
    */
   public static Optional<Class<?>> propertyType(final Class<?> type, final String property) {
+    if (!isReadable(type, property)) {
+      return Optional.empty();
+    }
     final Method getter = getter(type, property);
     if (getter != null) {
       return Optional.of(getter.getReturnType());
@@ -54,7 +60,24 @@ public final class PropertyAccessors {
     return field == null ? Optional.empty() : Optional.of(field.getType());
   }
 
+  /**
+   * Why a property cannot be read, for the warning of an ignored rule: it does not exist, or the
+   * type is one a path may never read from.
+   */
+  public static String describeMissing(final Class<?> type, final String property) {
+    return isReadable(type, property)
+        ? "'" + property + "' is not a property of " + type.getName()
+        : "'" + property + "' cannot be read from " + type.getName() + " (protected type)";
+  }
+
+  private static boolean isReadable(final Class<?> type, final String property) {
+    return !ForbiddenTypes.CLASS_PROPERTY.equals(property) && !ForbiddenTypes.contains(type);
+  }
+
   private static Optional<MethodHandle> discover(final Class<?> type, final String property) {
+    if (!isReadable(type, property)) {
+      return Optional.empty();
+    }
     final Method getter = getter(type, property);
     if (getter != null) {
       return toReader(() -> unreflect(getter));
@@ -96,7 +119,7 @@ public final class PropertyAccessors {
     try {
       final Method method = type.getMethod(name);
       return Modifier.isStatic(method.getModifiers()) ? null : method;
-    } catch (NoSuchMethodException | SecurityException absent) {
+    } catch (NoSuchMethodException | SecurityException | LinkageError absent) {
       return null;
     }
   }
@@ -105,7 +128,7 @@ public final class PropertyAccessors {
     try {
       final Field field = type.getField(name);
       return Modifier.isStatic(field.getModifiers()) ? null : field;
-    } catch (NoSuchFieldException | SecurityException absent) {
+    } catch (NoSuchFieldException | SecurityException | LinkageError absent) {
       return null;
     }
   }

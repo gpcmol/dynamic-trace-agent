@@ -48,12 +48,23 @@ agent image tag instead of `latest`, because the extension uses agent APIs.
 ### Requirement: Docker image and CI
 The project SHALL publish a Docker image containing `/extensions/dynamic-trace-agent.jar` on a minimal
 base that provides `cp` (required by the Operator's copy init container, e.g. busybox) to GHCR with
-a mutable `snapshot` tag for branch builds, a `vX.Y.Z` plus `latest` tag per release, and
-retention of the five newest release versions.
+a `X.Y.Z-SNAPSHOT` tag plus the mutable `snapshot` tag for branch builds, an `X.Y.Z` plus `latest`
+tag per release, and retention of the five newest release versions and the five newest snapshot
+versions. Every branch build SHALL get the next patch version after the highest version published
+so far (release or snapshot). A release SHALL get the version of the newest snapshot, or the next
+patch version when no snapshot was built since the last release.
+
+#### Scenario: Release after a snapshot
+- **WHEN** the newest snapshot is `0.1.5-SNAPSHOT` and a pull request is merged
+- **THEN** the release image is `0.1.5` and the next branch build is `0.1.6-SNAPSHOT`
+
+#### Scenario: Pipeline triggered again
+- **WHEN** the pipeline runs on a branch and the newest published snapshot is `0.1.4-SNAPSHOT`
+- **THEN** the image is pushed as `0.1.5-SNAPSHOT` and the `snapshot` tag moves to it
 
 #### Scenario: Release tag
-- **WHEN** a `v*.*.*` tag is pushed
-- **THEN** the image is pushed with the version tag and `latest`
+- **WHEN** a git tag `v0.1.5` is pushed
+- **THEN** the image is pushed as `0.1.5` (without the `v`) and `latest`
 
 ### Requirement: Code quality gates
 The build SHALL enforce: formatting with Spotless (google-java-format), static analysis with Error

@@ -1,14 +1,15 @@
 package org.otel.agent.extension.reload;
 
 import java.lang.instrument.Instrumentation;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.otel.agent.core.binding.ClassHierarchy;
 import org.otel.agent.core.plan.PlanDiff;
 import org.otel.agent.core.plan.PlanEntry;
 import org.otel.agent.core.plan.TransformationPlan;
@@ -106,12 +107,7 @@ public final class Retransformer {
 
   private static boolean hasPublicMethod(final Class<?> type, final String name) {
     try {
-      for (final Method method : type.getMethods()) {
-        if (method.getName().equals(name)) {
-          return true;
-        }
-      }
-      return false;
+      return ClassHierarchy.hasPublicMethod(type, name);
     } catch (RuntimeException | LinkageError unresolvable) {
       return true; // cannot inspect the class: do not warn about it
     }
@@ -136,20 +132,6 @@ public final class Retransformer {
   }
 
   private static boolean hierarchyContainsAny(final Class<?> type, final Set<String> names) {
-    for (Class<?> current = type; current != null; current = current.getSuperclass()) {
-      if (names.contains(current.getName()) || anyInterfaceIn(current, names)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private static boolean anyInterfaceIn(final Class<?> type, final Set<String> names) {
-    for (final Class<?> candidate : type.getInterfaces()) {
-      if (names.contains(candidate.getName()) || anyInterfaceIn(candidate, names)) {
-        return true;
-      }
-    }
-    return false;
+    return !Collections.disjoint(ClassHierarchy.byName(type).keySet(), names);
   }
 }

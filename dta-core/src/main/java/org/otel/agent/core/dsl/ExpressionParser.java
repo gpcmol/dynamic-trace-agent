@@ -30,17 +30,32 @@ import org.otel.agent.core.path.PathCompiler;
  * </pre>
  *
  * A predicate without operator ({@code $arg0.electric}) is a {@link Expression.Truthy}.
+ *
+ * <p>The rule file is operator input: an expression longer than {@value #MAX_LENGTH} characters or
+ * nested deeper than {@value #MAX_DEPTH} levels is a syntax error, so neither this parser nor the
+ * evaluation on application threads can run out of stack.
  */
 public final class ExpressionParser {
 
+  /** Longest expression accepted, in characters. */
+  public static final int MAX_LENGTH = 4_096;
+
+  /** Deepest nesting accepted: parentheses, {@code not}, function calls, arithmetic chains. */
+  public static final int MAX_DEPTH = 64;
+
   private final List<Token> tokens;
   private int index;
+  private int depth;
 
   private ExpressionParser(final List<Token> tokens) {
     this.tokens = tokens;
   }
 
   public static Expression parse(final String expression) throws ConditionException {
+    if (expression.length() > MAX_LENGTH) {
+      throw new ConditionException(
+          Category.SYNTAX_ERROR, "expression is longer than " + MAX_LENGTH + " characters");
+    }
     final ExpressionParser parser = new ExpressionParser(Lexer.tokenize(expression));
     final Expression result = parser.parseOr();
     parser.expect(Token.Type.END, "end of expression");
@@ -67,7 +82,10 @@ public final class ExpressionParser {
 
   private Expression parseNot() throws ConditionException {
     if (accept(Token.Type.NOT)) {
-      return new Expression.Not(parseNot());
+      descend();
+      final Expression term = parseNot();
+      depth--;
+      return new Expression.Not(term);
     }
     return parsePredicate();
   }
@@ -96,7 +114,9 @@ public final class ExpressionParser {
   private Expression tryParseGroupedExpression() throws ConditionException {
     final int start = index;
     advance();
+    descend();
     final Expression inner = parseOr();
+    depth--;
     expect(Token.Type.RIGHT_PAREN, "')'");
     if (startsOperatorAfterOperand(current().type())) {
       index = start;
@@ -147,6 +167,7 @@ public final class ExpressionParser {
   }
 
   private Operand parseSum() throws ConditionException {
+    final int outer = depth;
     Operand left = parseProduct();
     while (true) {
       final ArithmeticOperator operator =
@@ -156,14 +177,17 @@ public final class ExpressionParser {
             default -> null;
           };
       if (operator == null) {
+        depth = outer;
         return left;
       }
       advance();
+      descend(); // a chain a + b + c + … is a tree that gets one level deeper per operator
       left = new Operand.Arithmetic(operator, left, parseProduct());
     }
   }
 
   private Operand parseProduct() throws ConditionException {
+    final int outer = depth;
     Operand left = parseUnary();
     while (true) {
       final ArithmeticOperator operator =
@@ -174,9 +198,11 @@ public final class ExpressionParser {
             default -> null;
           };
       if (operator == null) {
+        depth = outer;
         return left;
       }
       advance();
+      descend();
       left = new Operand.Arithmetic(operator, left, parseUnary());
     }
   }
@@ -192,36 +218,31 @@ public final class ExpressionParser {
   }
 
   private Operand parseAtom() throws ConditionException {
-    final Token token = current();
-    switch (token.type()) {
-      case NUMBER:
-        advance();
-        return number(token.text());
-      case STRING:
-        advance();
-        return new Operand.Literal(token.text());
-      case TRUE:
-        advance();
-        return new Operand.Literal(Boolean.TRUE);
-      case FALSE:
-        advance();
-        return new Operand.Literal(Boolean.FALSE);
-      case NULL:
-        advance();
-        return new Operand.Literal(null);
-      case PATH:
-        advance();
-        return reference(token);
-      case LEFT_PAREN:
-        advance();
-        final Operand grouped = parseSum();
-        expect(Token.Type.RIGHT_PAREN, "')'");
-        return grouped;
-      case IDENTIFIER:
-        return parseValueFunction(token);
-      default:
-        throw syntaxError("unexpected " + token);
-    }
+    return switch (current().type()) {
+      case NUMBER -> number(advance().text());
+      case STRING -> new Operand.Literal(advance().text());
+      case TRUE -> literal(Boolean.TRUE);
+      case FALSE -> literal(Boolean.FALSE);
+      case NULL -> literal(null);
+      case PATH -> reference(advance());
+      case LEFT_PAREN -> parseGroupedSum();
+      case IDENTIFIER -> parseValueFunction(current());
+      default -> throw syntaxError("unexpected " + current());
+    };
+  }
+
+  private Operand.Literal literal(final Object value) {
+    advance();
+    return new Operand.Literal(value);
+  }
+
+  private Operand parseGroupedSum() throws ConditionException {
+    advance();
+    descend();
+    final Operand grouped = parseSum();
+    depth--;
+    expect(Token.Type.RIGHT_PAREN, "')'");
+    return grouped;
   }
 
   private Operand parseValueFunction(final Token name) throws ConditionException {
@@ -244,11 +265,13 @@ public final class ExpressionParser {
   private List<Operand> parseArguments() throws ConditionException {
     final Token name = advance();
     expect(Token.Type.LEFT_PAREN, "'(' after " + name.text());
+    descend();
     final List<Operand> arguments = new ArrayList<>();
     arguments.add(parseSum());
     while (accept(Token.Type.COMMA)) {
       arguments.add(parseSum());
     }
+    depth--;
     expect(Token.Type.RIGHT_PAREN, "')'");
     return arguments;
   }
@@ -317,6 +340,13 @@ public final class ExpressionParser {
       throw syntaxError("expected " + description + " but found " + current());
     }
     advance();
+  }
+
+  /** One level deeper; fails beyond {@link #MAX_DEPTH}. Callers go back up with {@code depth--}. */
+  private void descend() throws ConditionException {
+    if (++depth > MAX_DEPTH) {
+      throw syntaxError("expression is nested deeper than " + MAX_DEPTH + " levels");
+    }
   }
 
   private ConditionException syntaxError(final String message) {

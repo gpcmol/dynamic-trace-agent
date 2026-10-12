@@ -38,6 +38,8 @@ on the current span.*
   already-loaded classes.
 - **Operator-ready**: one extension jar, no extra `-javaagent`, works with a read-only root filesystem.
 - **Safe**: never affects the application; invalid configuration never replaces a valid one.
+- **Secure by construction**: the rule file is data, never code — hardened XML parsing, no way to
+  call arbitrary methods, bounded input ([docs/06-config-xml.md](docs/06-config-xml.md) §6).
 - **Fast**: 13 ns and 0 bytes per call when a condition is false; ~2.9 % median throughput overhead
   for the reference rule.
 - **No leaks**: application classloaders stay collectable; proven by tests.
@@ -100,6 +102,7 @@ Complete example: [`deploy/kubernetes/`](deploy/kubernetes).
 ```bash
 mvn verify                                   # format, Error Prone, unit, architecture, memory and end-to-end tests
 mvn spotless:apply                           # format
+./lcm.sh --check                             # outdated dependencies / plugins (./lcm.sh updates them)
 java -jar dta-benchmarks/target/benchmarks.jar -prof gc     # JMH
 dta-benchmarks/scripts/bench.sh                             # k6 macro benchmark (needs k6, jq)
 ```

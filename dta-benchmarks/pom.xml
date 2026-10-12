@@ -36,7 +36,6 @@
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-sdk</artifactId>
-      <version>${otel.sdk.version}</version>
     </dependency>
   </dependencies>
 

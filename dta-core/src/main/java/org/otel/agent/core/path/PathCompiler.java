@@ -14,9 +14,13 @@ import org.otel.agent.core.naming.JavaNames;
  * </pre>
  *
  * Attribute paths need at least one segment; condition references may be a bare root ({@code
- * $return == null}).
+ * $return == null}). The property {@code class} is refused (see {@link ForbiddenTypes}) and a path
+ * has at most {@value #MAX_SEGMENTS} segments.
  */
 public final class PathCompiler {
+
+  /** Longest path accepted; real paths have a handful of segments. */
+  public static final int MAX_SEGMENTS = 32;
 
   private PathCompiler() {}
 
@@ -39,6 +43,9 @@ public final class PathCompiler {
       throw new InvalidPathException(String.valueOf(text), "path is empty");
     }
     final String[] parts = text.split("\\.", -1);
+    if (parts.length - 1 > MAX_SEGMENTS) {
+      throw new InvalidPathException(text, "more than " + MAX_SEGMENTS + " segments");
+    }
     final PathRoot root = parseRoot(text, parts[0]);
     final List<PathSegment> segments = new ArrayList<>(parts.length - 1);
     for (int i = 1; i < parts.length; i++) {
@@ -49,13 +56,11 @@ public final class PathCompiler {
 
   private static PathRoot parseRoot(final String text, final String token)
       throws InvalidPathException {
-    switch (token) {
-      case "$this":
-        return PathRoot.THIS;
-      case "$return":
-        return PathRoot.RETURN;
-      default:
-        break;
+    if (token.equals("$this")) {
+      return PathRoot.THIS;
+    }
+    if (token.equals("$return")) {
+      return PathRoot.RETURN;
     }
     if (!token.startsWith("$arg")) {
       throw new InvalidPathException(text, "must start with $this, $return or $argN");
@@ -99,6 +104,9 @@ public final class PathCompiler {
       throws InvalidPathException {
     if (!JavaNames.isIdentifier(property)) {
       throw new InvalidPathException(text, "'" + property + "' is not a valid property name");
+    }
+    if (ForbiddenTypes.CLASS_PROPERTY.equals(property)) {
+      throw new InvalidPathException(text, "'class' cannot be read");
     }
   }
 
