@@ -39,7 +39,7 @@ jobs:
         # in the Instrumentation CR; the extension uses agent-internal APIs (docs/03-classloaders.md).
         otel-agent: ["2.30.0"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v4
         with:
@@ -60,7 +60,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
