@@ -8,6 +8,6 @@ RUN mvn -B -q -DskipTests -pl dta-extension -am package \
     && mkdir -p /out/extensions \
     && cp dta-extension/target/dynamic-trace-agent.jar /out/extensions/dynamic-trace-agent.jar
 
-FROM busybox:1.37.0
+FROM busybox:1.38.0
 COPY --from=build /out/extensions/ /extensions/
 RUN chmod go+r /extensions/*.jar
