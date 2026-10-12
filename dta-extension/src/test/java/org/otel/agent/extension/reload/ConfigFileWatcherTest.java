@@ -159,4 +159,42 @@ class ConfigFileWatcherTest {
 
     assertEquals(List.of("content:<a/>", "content:<bb/>"), events);
   }
+
+  @Test
+  void oversizedFileIsNotLoadedAndKeepsTheConfiguration() throws Exception {
+    write("<a/>", 1);
+    watcher.poll();
+    write("<!--" + "x".repeat(ConfigFileWatcher.MAX_FILE_BYTES) + "--><b/>", 2);
+
+    watcher.poll();
+    watcher.poll();
+
+    assertEquals(List.of("content:<a/>"), events, "current configuration stays");
+    assertEquals(1, warnings.stream().filter(w -> w.contains("larger than")).count());
+
+    write("<bb/>", 3);
+    watcher.poll();
+
+    assertEquals(List.of("content:<a/>", "content:<bb/>"), events);
+  }
+
+  @Test
+  void directoryInsteadOfFileIsNotRead() throws Exception {
+    Files.createDirectory(file);
+
+    watcher.poll();
+
+    assertEquals(List.of(), events);
+    assertEquals(1, warnings.stream().filter(w -> w.contains("not a regular file")).count());
+  }
+
+  @Test
+  void malformedUtf8IsNotLoaded() throws Exception {
+    Files.write(file, new byte[] {'<', 'a', (byte) 0xC3, '/', '>'});
+
+    watcher.poll();
+
+    assertEquals(List.of(), events);
+    assertEquals(1, warnings.stream().filter(w -> w.contains("cannot be read")).count());
+  }
 }

@@ -11,7 +11,7 @@ design behind them.
 | [03-classloaders.md](03-classloaders.md) | The classloader boundary, the gateway, lifecycles, leak rules, spike results |
 | [04-flows.md](04-flows.md) | Start-up, configuration change, method exit, retransformation |
 | [05-state-machines.md](05-state-machines.md) | Configuration lifecycle (inactive, disabled, active; invalid, unreadable, missing) |
-| [06-config-xml.md](06-config-xml.md) | XML reference, paths, validation messages, migration |
+| [06-config-xml.md](06-config-xml.md) | XML reference, paths, validation messages, security (trust model, limits) |
 | [07-dsl.md](07-dsl.md) | Condition language: grammar, typing, null semantics, failures |
 | [08-performance.md](08-performance.md) | Hot-path rules, measured costs, next steps |
 | [09-memory-safety.md](09-memory-safety.md) | Leak catalogue, rules, tests |

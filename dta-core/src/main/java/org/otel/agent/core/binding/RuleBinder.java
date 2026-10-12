@@ -2,15 +2,10 @@ package org.otel.agent.core.binding;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.otel.agent.core.binding.MethodBinding.BoundAttribute;
 import org.otel.agent.core.binding.MethodBinding.BoundRule;
 import org.otel.agent.core.config.ConfigDocument.IgnoredRule;
@@ -54,7 +49,7 @@ public final class RuleBinder {
     if (candidates.isEmpty()) {
       return MethodBinding.NONE;
     }
-    final Map<String, Class<?>> hierarchy = typeHierarchyByName(receiver);
+    final Map<String, Class<?>> hierarchy = ClassHierarchy.byName(receiver);
     final ExitSignature signature =
         new ExitSignature(receiver, List.of(method.getParameterTypes()), method.getReturnType());
     final List<BoundRule> rules = new ArrayList<>();
@@ -80,7 +75,7 @@ public final class RuleBinder {
       final Class<?> receiver)
       throws BindingException {
     final Selector selector = candidate.selector();
-    if (!hasPublicMethod(selectedType, selector.methodName())) {
+    if (!ClassHierarchy.hasPublicMethod(selectedType, selector.methodName())) {
       throw new BindingException(
           selector.methodName() + " is not a public method of " + selectedType.getName());
     }
@@ -126,10 +121,8 @@ public final class RuleBinder {
         throw new BindingException(
             "attribute '"
                 + attribute.key()
-                + "': '"
-                + segment.property()
-                + "' is not a property of "
-                + type.getName()
+                + "': "
+                + PropertyAccessors.describeMissing(type, segment.property())
                 + " (in '"
                 + path
                 + "')");
@@ -160,35 +153,6 @@ public final class RuleBinder {
               ? signature.parameterTypes().get(argument.index())
               : null;
     };
-  }
-
-  private static boolean hasPublicMethod(final Class<?> type, final String name) {
-    for (final Method method : type.getMethods()) {
-      if (method.getName().equals(name)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** The class, its superclasses and all their interfaces, by binary name. */
-  private static Map<String, Class<?>> typeHierarchyByName(final Class<?> type) {
-    final Map<String, Class<?>> byName = new HashMap<>();
-    final Deque<Class<?>> pending = new ArrayDeque<>();
-    final Set<Class<?>> seen = new HashSet<>();
-    pending.add(type);
-    while (!pending.isEmpty()) {
-      final Class<?> current = pending.poll();
-      if (!seen.add(current)) {
-        continue;
-      }
-      byName.putIfAbsent(current.getName(), current);
-      if (current.getSuperclass() != null) {
-        pending.add(current.getSuperclass());
-      }
-      pending.addAll(List.of(current.getInterfaces()));
-    }
-    return byName;
   }
 
   /** A rule cannot be bound to this class. */

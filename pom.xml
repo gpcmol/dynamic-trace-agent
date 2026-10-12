@@ -29,14 +29,32 @@
          All agent-provided libraries are 'provided': the agent supplies them at runtime. -->
     <otel.agent.version>2.30.0</otel.agent.version>
     <otel.extension-api.version>2.30.0-alpha</otel.extension-api.version>
-    <otel.sdk.version>1.64.0</otel.sdk.version>
     <autoservice.version>1.1.1</autoservice.version>
+
+    <!-- Demo application and test OTLP receiver only; not part of the extension jar. -->
+    <otel.proto.version>1.10.0-alpha</otel.proto.version>
+    <protobuf.version>4.35.1</protobuf.version>
+    <jackson.version>2.22.3</jackson.version>
 
     <junit.version>5.13.4</junit.version>
     <archunit.version>1.3.0</archunit.version>
     <jmh.version>1.37</jmh.version>
     <errorprone.version>2.36.0</errorprone.version>
+    <!-- Not updated by lcm.sh: a newer formatter needs a newer major version of the Spotless plugin
+         and reformats the sources. Update the two together, by hand. -->
     <google-java-format.version>1.35.0</google-java-format.version>
+
+    <!-- Build plugins. Every version is a property that is used in (plugin) dependency management
+         below, so that the versions plugin can update all of them (lcm.sh). -->
+    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
+    <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+    <maven-help-plugin.version>3.5.1</maven-help-plugin.version>
+    <spotless-maven-plugin.version>2.44.0</spotless-maven-plugin.version>
+    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -62,11 +80,13 @@
         <version>${project.version}</version>
       </dependency>
 
+      <!-- Everything the agent bundles, in the versions it bundles them: extension API, SDK. -->
       <dependency>
-        <groupId>io.opentelemetry.javaagent</groupId>
-        <artifactId>opentelemetry-javaagent-extension-api</artifactId>
+        <groupId>io.opentelemetry.instrumentation</groupId>
+        <artifactId>opentelemetry-instrumentation-bom-alpha</artifactId>
         <version>${otel.extension-api.version}</version>
-        <scope>provided</scope>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>io.opentelemetry.javaagent</groupId>
@@ -74,12 +94,6 @@
         <version>${otel.agent.version}</version>
       </dependency>
       <!-- Byte Buddy comes transitively with the extension API (same version as inside the agent). -->
-      <dependency>
-        <groupId>io.opentelemetry</groupId>
-        <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
-        <version>${otel.sdk.version}</version>
-        <scope>provided</scope>
-      </dependency>
       <dependency>
         <groupId>com.google.auto.service</groupId>
         <artifactId>auto-service-annotations</artifactId>
@@ -93,12 +107,6 @@
         <version>${junit.version}</version>
         <type>pom</type>
         <scope>import</scope>
-      </dependency>
-      <dependency>
-        <groupId>io.opentelemetry</groupId>
-        <artifactId>opentelemetry-sdk-testing</artifactId>
-        <version>${otel.sdk.version}</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.tngtech.archunit</groupId>
@@ -115,6 +123,31 @@
         <groupId>org.openjdk.jmh</groupId>
         <artifactId>jmh-generator-annprocess</artifactId>
         <version>${jmh.version}</version>
+      </dependency>
+
+      <!-- Demo application and test OTLP receiver. -->
+      <dependency>
+        <groupId>io.opentelemetry.proto</groupId>
+        <artifactId>opentelemetry-proto</artifactId>
+        <version>${otel.proto.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+
+      <!-- A build tool, not a dependency of any module: listed so that the versions plugin sees
+           its version property. -->
+      <dependency>
+        <groupId>com.google.errorprone</groupId>
+        <artifactId>error_prone_core</artifactId>
+        <version>${errorprone.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -133,7 +166,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.13.0</version>
+          <version>${maven-compiler-plugin.version}</version>
           <configuration>
             <release>${maven.compiler.release}</release>
             <compilerArgs>
@@ -164,47 +197,53 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.2</version>
+          <version>${maven-surefire-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.4.2</version>
+          <version>${maven-jar-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.6.0</version>
+          <version>${maven-shade-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.8.1</version>
+          <version>${maven-dependency-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>${maven-enforcer-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>com.diffplug.spotless</groupId>
           <artifactId>spotless-maven-plugin</artifactId>
-          <version>2.44.0</version>
+          <version>${spotless-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
-          <version>3.5.2</version>
+          <version>${maven-surefire-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>versions-maven-plugin</artifactId>
-          <version>2.18.0</version>
+          <version>${versions-maven-plugin.version}</version>
+          <configuration>
+            <generateBackupPoms>false</generateBackupPoms>
+            <!-- No pre-releases (1.0.0-rc1, 2.0.0-M3, 3.0.0-beta.2). A bare "-alpha" suffix stays
+                 allowed: that is how OpenTelemetry versions its not-yet-stable artifacts. -->
+            <ignoredVersions>(?i).*[.-](alpha|beta|rc|m|cr)[.-]?\d+.*</ignoredVersions>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-help-plugin</artifactId>
-          <version>3.5.1</version>
+          <version>${maven-help-plugin.version}</version>
         </plugin>
       </plugins>
     </pluginManagement>

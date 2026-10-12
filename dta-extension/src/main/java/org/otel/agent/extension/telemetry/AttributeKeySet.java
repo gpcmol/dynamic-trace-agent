@@ -33,8 +33,4 @@ public final class AttributeKeySet {
   public static AttributeKeySet of(final String name) {
     return new AttributeKeySet(name);
   }
-
-  public String name() {
-    return string.getKey();
-  }
 }

@@ -40,9 +40,35 @@ Maps, static members, non-public members and arbitrary method calls SHALL NOT be
 - **WHEN** `$return` is `record Result(boolean accepted, String status)` without getters
 - **THEN** `$return.status` resolves via the accessor `status()`
 
+### Requirement: Protected types
+A path SHALL NOT be able to reach the JVM itself or change application state. The property `class`
+SHALL be refused when the path is compiled. Values whose type is, extends or implements one of the
+protected JDK types — `Class`, `ClassLoader`, `Module`, `ModuleLayer`, `Thread`, `ThreadGroup`,
+`Runtime`, `Process`, `ProcessBuilder`, `ProcessHandle`, reflection and method-handle objects,
+`ProtectionDomain`, streams, readers, writers, channels, sockets, `URLConnection`, JDBC objects,
+`Key`, `KeyStore`, `AtomicInteger`, `AtomicLong` — SHALL have no properties.
+
+#### Scenario: Class property
+- **WHEN** a path contains the segment `class` (e.g. `$this.class.classLoader`)
+- **THEN** the path is invalid
+
+#### Scenario: State-changing getter
+- **WHEN** `$this.sequence.andIncrement` is resolved and `sequence` is an `AtomicInteger`
+- **THEN** the result is `null` and the counter is unchanged
+
+### Requirement: Bounded paths and collections
+A path SHALL have at most 32 segments. Of an array or `Iterable` at most 1 000 elements SHALL be
+read, so that a huge, endless or lazily loaded collection cannot stall the application thread; a
+resulting list SHALL have at most 1 000 elements.
+
+#### Scenario: Endless collection
+- **WHEN** `$arg0.stream.name` is resolved and `stream` is an `Iterable` that never ends
+- **THEN** the result is the list of the first 1 000 names
+
 ### Requirement: Indexing
 An indexed segment SHALL select element `index` from an array, a `List`, or (by iteration) any
-other `Iterable`; an out-of-range index resolves to `null`.
+other `Iterable`; an out-of-range index resolves to `null`. An `Iterable` that is not a
+`Collection` is iterated for at most 1 000 elements.
 
 #### Scenario: Index out of range
 - **WHEN** `$arg0.passengers[5].name` is resolved and there are 2 passengers

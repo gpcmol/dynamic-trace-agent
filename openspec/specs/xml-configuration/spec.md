@@ -35,7 +35,8 @@ The parser SHALL reject: unknown elements, unknown XML attributes, any namespace
 `<static>`/`<dynamic>` sections, blank required values, any element in `<dynamic>` other than
 `<rule>`, a rule without selector, and a `(class, method)` pair used more than once anywhere in the
 document. Attribute keys SHALL be unique across static and dynamic
-attributes together and at most 255 characters; keys and values are not trimmed.
+attributes together, at most 255 characters and free of control characters; keys and values are
+not trimmed.
 
 #### Scenario: Unknown element
 - **WHEN** `<dynamic>` contains an element other than `<rule>`
@@ -52,6 +53,29 @@ and external entities, external DTDs and external schemas disabled.
 #### Scenario: XXE attempt
 - **WHEN** the document declares a DOCTYPE or external entity
 - **THEN** it is rejected and no file or network resource is read
+
+### Requirement: The configuration is data, never code
+Nothing in the configuration SHALL be executed or be able to name code to execute: class and method
+names SHALL be syntactically valid Java names that are only compared with loaded classes, paths
+SHALL consist of a root, property names and indexes only, and conditions SHALL offer no method
+calls beyond the fixed functions of the condition language.
+
+#### Scenario: Expression in a name
+- **WHEN** a selector's class or method name contains anything but a Java name (e.g. `park();exit`)
+- **THEN** the document is rejected
+
+#### Scenario: Markup or expression syntax in a value
+- **WHEN** a static attribute value contains text such as `${jndi:…}` or escaped markup
+- **THEN** it is written to the span as that literal text and nothing is evaluated
+
+### Requirement: Bounded configuration file
+The agent SHALL only read a configuration that is a regular file of at most 1 MiB of valid UTF-8.
+Any other file SHALL be treated as unreadable: the current configuration stays active and one
+warning is logged.
+
+#### Scenario: Oversized file
+- **WHEN** the configuration file grows beyond 1 MiB
+- **THEN** it is not loaded, the current configuration stays active and one warning is logged
 
 ### Requirement: Selector semantics
 Selectors within a rule SHALL be OR alternatives and criteria within a selector SHALL be AND

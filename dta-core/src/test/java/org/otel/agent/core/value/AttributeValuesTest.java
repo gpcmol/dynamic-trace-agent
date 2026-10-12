@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,5 +107,24 @@ class AttributeValuesTest {
   @Test
   void emptyCollectionGivesNothing() {
     assertNull(AttributeValues.convert(Set.of()));
+  }
+
+  @Test
+  void longListsAreTruncated() {
+    final int limit = AttributeValues.MAX_LIST_SIZE;
+
+    assertEquals(
+        limit,
+        ((ValueList) AttributeValues.convert(Collections.nCopies(limit + 1, "x"))).values().size());
+    assertEquals(limit, ((ValueList) AttributeValues.convert(new int[limit + 1])).values().size());
+  }
+
+  @Test
+  void endlessIterableTerminates() {
+    final Iterable<String> endless = () -> Stream.generate(() -> "x").iterator();
+
+    assertEquals(
+        AttributeValues.MAX_LIST_SIZE,
+        ((ValueList) AttributeValues.convert(endless)).values().size());
   }
 }

@@ -59,7 +59,7 @@ final class ClassBindings {
       final int site,
       final EngineState state,
       final AtomicReference<Entry> holder) {
-    final MethodEnrichment enrichment = bind(type, site, state);
+    final MethodEnrichment enrichment = bindSafely(type, site, state);
     while (true) {
       final Entry current = holder.get();
       final Entry base =
@@ -73,6 +73,22 @@ final class ClassBindings {
       if (holder.compareAndSet(current, base.with(site, enrichment))) {
         return enrichment;
       }
+    }
+  }
+
+  /**
+   * A class that cannot be bound (e.g. it refers to a type that is missing at runtime) gets no
+   * enrichment for this configuration; the failure is remembered instead of repeated on every call.
+   */
+  private MethodEnrichment bindSafely(
+      final Class<?> type, final int site, final EngineState state) {
+    try {
+      return bind(type, site, state);
+    } catch (RuntimeException | LinkageError failure) {
+      log.warnOnce(
+          "bind|" + failure,
+          "cannot bind rules to " + type.getName() + " (" + failure + "); it is not enriched");
+      return MethodEnrichment.NONE;
     }
   }
 

@@ -19,11 +19,18 @@ import java.util.List;
  *   <li>{@code Float}/{@code Double}/{@code BigDecimal}: double if finite, otherwise nothing.
  *   <li>Arrays and {@code Iterable}s: a {@link ValueList} if all non-null elements convert to the
  *       same type; {@code null} elements are dropped; an empty primitive/known array keeps its
- *       element type; mixed or unconvertible elements give nothing.
+ *       element type; mixed or unconvertible elements give nothing. Only the first {@value
+ *       #MAX_LIST_SIZE} elements are looked at.
  *   <li>Anything else (domain objects, maps, …): nothing. There is no {@code toString()} fallback.
  * </ul>
  */
 public final class AttributeValues {
+
+  /**
+   * Most elements read from one array or collection. Bounds the work and the span size when a path
+   * points at a huge (or endless, lazily loaded) collection.
+   */
+  public static final int MAX_LIST_SIZE = 1_000;
 
   private AttributeValues() {}
 
@@ -74,43 +81,50 @@ public final class AttributeValues {
   }
 
   private static ValueList convertArray(final Object array) {
-    final int length = Array.getLength(array);
+    final int length = Math.min(Array.getLength(array), MAX_LIST_SIZE);
     final List<Object> values = new ArrayList<>(length);
-    Class<?> elementType = null;
     for (int i = 0; i < length; i++) {
-      final Object element = Array.get(array, i);
-      if (element == null) {
-        continue;
-      }
-      final Object converted = convertScalar(element);
-      if (converted == null || (elementType != null && converted.getClass() != elementType)) {
+      if (!addElement(values, Array.get(array, i))) {
         return null;
       }
-      elementType = converted.getClass();
-      values.add(converted);
     }
-    if (elementType == null) {
-      elementType = attributeTypeOf(array.getClass().getComponentType());
-    }
+    final Class<?> elementType =
+        values.isEmpty()
+            ? attributeTypeOf(array.getClass().getComponentType())
+            : values.get(0).getClass();
     return elementType == null ? null : new ValueList(elementType, values);
   }
 
   private static ValueList convertIterable(final Iterable<?> iterable) {
     final List<Object> values = new ArrayList<>();
-    Class<?> elementType = null;
+    int seen = 0;
     for (final Object element : iterable) {
-      if (element == null) {
-        continue;
+      if (seen++ == MAX_LIST_SIZE) {
+        break;
       }
-      final Object converted = convertScalar(element);
-      if (converted == null || (elementType != null && converted.getClass() != elementType)) {
+      if (!addElement(values, element)) {
         return null;
       }
-      elementType = converted.getClass();
-      values.add(converted);
     }
     // An empty collection has no knowable element type (erasure): write nothing.
-    return elementType == null ? null : new ValueList(elementType, values);
+    return values.isEmpty() ? null : new ValueList(values.getFirst().getClass(), values);
+  }
+
+  /**
+   * Adds the converted element ({@code null} is dropped); {@code false} when it cannot be converted
+   * or has another type than the elements before it.
+   */
+  private static boolean addElement(final List<Object> values, final Object element) {
+    if (element == null) {
+      return true;
+    }
+    final Object converted = convertScalar(element);
+    if (converted == null
+        || (!values.isEmpty() && values.getFirst().getClass() != converted.getClass())) {
+      return false;
+    }
+    values.add(converted);
+    return true;
   }
 
   /** The attribute element type a Java component type converts to, or {@code null}. */

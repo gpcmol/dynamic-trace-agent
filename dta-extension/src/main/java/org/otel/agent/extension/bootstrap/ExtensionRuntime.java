@@ -50,7 +50,7 @@ final class ExtensionRuntime {
             new EngineTarget(engine), new Retransformer(instrumentation, log), log);
     final Path file = settings.configFile().orElseThrow();
     final ConfigFileWatcher watcher = new ConfigFileWatcher(file, coordinator, log);
-    watcher.poll();
+    pollSafely(watcher, coordinator, log);
 
     final long seconds = settings.interval().toSeconds();
     newPollerThread()
@@ -71,7 +71,8 @@ final class ExtensionRuntime {
     try {
       coordinator.reportSelectorProblems();
       watcher.poll();
-    } catch (RuntimeException | LinkageError failure) {
+    } catch (Throwable failure) {
+      // Anything escaping here would silently end the schedule: no reload would ever happen again.
       log.warn("configuration poll failed; retrying next interval", failure);
     }
   }

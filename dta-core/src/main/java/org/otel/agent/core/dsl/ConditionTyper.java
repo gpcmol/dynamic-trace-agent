@@ -265,10 +265,7 @@ public final class ConditionTyper {
                   () ->
                       new ConditionException(
                           Category.UNKNOWN_PROPERTY,
-                          "'"
-                              + segment.property()
-                              + "' is not a property of "
-                              + owningType.getName()
+                          PropertyAccessors.describeMissing(owningType, segment.property())
                               + " (in '"
                               + path
                               + "')"));

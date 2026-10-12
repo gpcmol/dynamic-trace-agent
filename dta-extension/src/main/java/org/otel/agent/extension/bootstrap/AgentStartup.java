@@ -24,7 +24,14 @@ public final class AgentStartup implements AgentListener {
   @Override
   public void afterAgent(final AutoConfiguredOpenTelemetrySdk sdk) {
     final AgentLog log = AgentLog.fromEnvironment();
-    final ReloadSettings settings = ReloadSettings.fromEnvironment();
+    final ReloadSettings settings;
+    try {
+      settings = ReloadSettings.fromEnvironment();
+    } catch (RuntimeException invalid) {
+      log.warn(
+          "invalid " + ReloadSettings.CONFIG_FILE_VARIABLE + "; enrichment is disabled", invalid);
+      return;
+    }
     if (settings.configFile().isEmpty()) {
       log.debug(() -> ReloadSettings.CONFIG_FILE_VARIABLE + " is not set: extension inactive");
       return;
@@ -38,7 +45,8 @@ public final class AgentStartup implements AgentListener {
     try {
       ExtensionRuntime.start(
           sdk.getOpenTelemetrySdk(), InstrumentationAccess.fromOpenTelemetryAgent(), settings, log);
-    } catch (RuntimeException | LinkageError failure) {
+    } catch (Throwable failure) {
+      // Nothing may escape into the OpenTelemetry agent's start-up.
       log.warn("cannot start; enrichment is disabled", failure);
     }
   }

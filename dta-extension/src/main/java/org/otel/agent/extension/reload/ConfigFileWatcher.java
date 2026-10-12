@@ -1,6 +1,8 @@
 package org.otel.agent.extension.reload;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -15,7 +17,8 @@ import org.otel.agent.extension.diag.AgentLog;
  *
  * <pre>
  *   file missing                 → listener.fileMissing()  (once per absence)
- *   exists but cannot be read    → keep current config, one warning per episode
+ *   exists but cannot be read,   → keep current config, one warning per episode
+ *     no regular file, too large
  *   modification time and size   → not read at all
  *     unchanged
  *   readable, content changed    → listener.contentChanged(text)
@@ -35,6 +38,12 @@ public final class ConfigFileWatcher {
     void fileMissing();
   }
 
+  /**
+   * Largest configuration file that is read. Real rule files are a few kilobytes; the limit keeps a
+   * wrong or hostile file from exhausting the application's heap.
+   */
+  public static final int MAX_FILE_BYTES = 1024 * 1024;
+
   private final Path file;
   private final Listener listener;
   private final AgentLog log;
@@ -51,10 +60,6 @@ public final class ConfigFileWatcher {
     this.log = Objects.requireNonNull(log, "log");
   }
 
-  public Path file() {
-    return file;
-  }
-
   public void poll() {
     final BasicFileAttributes attributes;
     try {
@@ -63,7 +68,7 @@ public final class ConfigFileWatcher {
       onMissing();
       return;
     } catch (IOException | RuntimeException unreadable) {
-      onUnreadable(unreadable);
+      onUnreadable(unreadable.toString());
       return;
     }
     if (!missing
@@ -71,14 +76,18 @@ public final class ConfigFileWatcher {
         && attributes.size() == lastSize) {
       return;
     }
+    if (!attributes.isRegularFile()) {
+      onUnreadable("not a regular file");
+      return;
+    }
     final String content;
     try {
-      content = Files.readString(file, StandardCharsets.UTF_8);
+      content = readBounded();
     } catch (NoSuchFileException removedMeanwhile) {
       onMissing();
       return;
     } catch (IOException | RuntimeException unreadable) {
-      onUnreadable(unreadable);
+      onUnreadable(unreadable.toString());
       return;
     }
     missing = false;
@@ -89,6 +98,22 @@ public final class ConfigFileWatcher {
       lastContent = content;
       listener.contentChanged(content);
     }
+  }
+
+  /**
+   * The file as UTF-8 text. Never reads more than {@link #MAX_FILE_BYTES} (+1 to notice the
+   * excess), whatever the file's size is or becomes while it is read.
+   */
+  private String readBounded() throws IOException {
+    final byte[] bytes;
+    try (InputStream input = Files.newInputStream(file)) {
+      bytes = input.readNBytes(MAX_FILE_BYTES + 1);
+    }
+    if (bytes.length > MAX_FILE_BYTES) {
+      throw new IOException("larger than " + MAX_FILE_BYTES + " bytes");
+    }
+    // A strict decoder: malformed UTF-8 is an error, not silently replaced.
+    return StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes)).toString();
   }
 
   private void onMissing() {
@@ -103,7 +128,7 @@ public final class ConfigFileWatcher {
   }
 
   /** Keeps the current configuration; warns once until the file is readable again. */
-  private void onUnreadable(final Exception cause) {
+  private void onUnreadable(final String cause) {
     if (!unreadableReported) {
       unreadableReported = true;
       log.warn(

@@ -56,7 +56,7 @@ to decide on retransformation.
 
 ### Requirement: Agent isolation
 The agent SHALL reject selectors whose class is in a protected namespace: `java.*`, `javax.*`,
-`jdk.*`, `sun.*`, `com.sun.*`, `io.opentelemetry.*`, `net.bytebuddy.*` and the agent's own
+`jdk.*`, `sun.*`, `com.sun.*`, `org.w3c.*`, `org.xml.*`, `io.opentelemetry.*`, `net.bytebuddy.*` and the agent's own
 packages. The rejection SHALL disable only the affected rule and be reported once.
 
 #### Scenario: JDK class configured

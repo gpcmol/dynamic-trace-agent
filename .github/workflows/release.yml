@@ -1,7 +1,9 @@
 name: Release after merge
 
-# When a pull request is merged into master: bump the patch version (0.1.3 → 0.1.4), build and test
-# the release, commit the version and push tag vX.Y.Z. The tag triggers "Publish image".
+# When a pull request is merged into master: release the version of the newest snapshot image
+# (0.1.5-SNAPSHOT → 0.1.5), or the next patch version when no snapshot was built since the last
+# release. Build and test the release, commit the version and push tag vX.Y.Z. The tag triggers
+# "Publish image".
 
 on:
   pull_request:
@@ -11,6 +13,9 @@ on:
 
 permissions:
   contents: write
+
+env:
+  PACKAGE: dynamic-trace-agent
 
 jobs:
   release:
@@ -29,8 +34,11 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Bump the patch version
+      - name: Set the release version
         id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
           CURRENT="$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)"
@@ -41,9 +49,15 @@ jobs:
           fi
           IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          # A snapshot built since the last release already took that number or a higher one
+          # (ci.yml): the release gets the number of the newest snapshot.
+          TAGS="$(gh api --paginate "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq '.[].metadata.container.tags[]' || true)" # fails when no image exists yet
+          NEW_VERSION="$(printf '%s\n' "$NEW_VERSION" "$TAGS" \
+            | sed -nE 's/^([0-9]+\.[0-9]+\.[0-9]+)(-SNAPSHOT)?$/\1/p' | sort -V | tail -n 1)"
           mvn -B -q versions:set -DnewVersion="$NEW_VERSION" -DgenerateBackupPoms=false
           echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Bumped ${CURRENT} -> ${NEW_VERSION}"
+          echo "Release ${CURRENT} -> ${NEW_VERSION}"
 
       - name: Build and test the release
         run: mvn -B verify

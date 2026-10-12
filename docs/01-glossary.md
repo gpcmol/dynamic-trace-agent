@@ -23,4 +23,4 @@
 | **Retransformation** | Re-weaving already loaded classes after the plan changed. | `Retransformer` |
 | **Degraded mode** | No JVM `Instrumentation` available: loaded classes are not retransformed. | `Retransformer` |
 | **Ignored rule** | A rule disabled with one warning (protected namespace, invalid condition, missing method or property). | `IgnoredRule` |
-| **Protected namespace** | Packages rules may not select: `java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`, `io.opentelemetry.`, `net.bytebuddy.`, `org.otel.agent.`. | `ProtectedNamespaces` |
+| **Protected namespace** | Packages rules may not select: `java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`, `org.w3c.`, `org.xml.`, `io.opentelemetry.`, `net.bytebuddy.`, `org.otel.agent.`. | `ProtectedNamespaces` |

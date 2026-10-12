@@ -16,6 +16,8 @@ final class ProtectedNamespaces {
           "jdk.",
           "sun.",
           "com.sun.",
+          "org.w3c.",
+          "org.xml.",
           "io.opentelemetry.",
           "net.bytebuddy.",
           "org.otel.agent.");

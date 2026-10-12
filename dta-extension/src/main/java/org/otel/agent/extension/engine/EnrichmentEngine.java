@@ -47,30 +47,25 @@ public final class EnrichmentEngine implements ExitHandler {
       final Object a1,
       final Object a2,
       final Object a3) {
-    final EngineState current = state;
-    if (!current.enabled() || self == null) {
-      return;
-    }
-    final MethodEnrichment enrichment = enrichmentFor(self, site, current);
-    if (enrichment.isEmpty()) {
-      return;
-    }
-    final ExitFrameSlot frame = ExitFrameSlot.tryAcquire();
-    if (frame == null) {
-      return;
-    }
-    try {
-      enrichment.enrich(frame.fill(self, returned, a0, a1, a2, a3), current, writer);
-    } catch (RuntimeException | LinkageError failure) {
-      log.debug(() -> "enrichment failed: " + failure);
-    } finally {
-      frame.release();
-    }
+    enrich(site, self, returned, a0, a1, a2, a3, null);
   }
 
   @Override
   public void onExitAllArgs(
       final int site, final Object self, final Object returned, final Object[] arguments) {
+    enrich(site, self, returned, null, null, null, null, arguments);
+  }
+
+  /** Both advice shapes end here: {@code arguments} is {@code null} for the fixed-argument one. */
+  private void enrich(
+      final int site,
+      final Object self,
+      final Object returned,
+      final Object a0,
+      final Object a1,
+      final Object a2,
+      final Object a3,
+      final Object[] arguments) {
     final EngineState current = state;
     if (!current.enabled() || self == null) {
       return;
@@ -84,9 +79,9 @@ public final class EnrichmentEngine implements ExitHandler {
       return;
     }
     try {
-      enrichment.enrich(frame.fill(self, returned, arguments), current, writer);
+      enrichment.enrich(frame.fill(self, returned, a0, a1, a2, a3, arguments), current, writer);
     } catch (RuntimeException | LinkageError failure) {
-      log.debug(() -> "enrichment failed: " + failure);
+      log.debug(() -> "enrichment failed: " + failure.getClass().getName());
     } finally {
       frame.release();
     }
@@ -97,7 +92,7 @@ public final class EnrichmentEngine implements ExitHandler {
     try {
       return bindings.lookup(self.getClass(), site, current);
     } catch (RuntimeException | LinkageError failure) {
-      log.debug(() -> "binding failed for site " + site + ": " + failure);
+      log.debug(() -> "binding failed for site " + site + ": " + failure.getClass().getName());
       return MethodEnrichment.NONE;
     }
   }

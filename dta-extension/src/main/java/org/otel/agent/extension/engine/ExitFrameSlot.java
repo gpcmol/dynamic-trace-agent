@@ -38,26 +38,21 @@ final class ExitFrameSlot implements ExitFrame {
     return slot;
   }
 
+  /** {@code arguments} is the complete argument array, or {@code null} to use a0..a3. */
   ExitFrameSlot fill(
       final Object self,
       final Object returned,
       final Object a0,
       final Object a1,
       final Object a2,
-      final Object a3) {
+      final Object a3,
+      final Object[] arguments) {
     this.self = self;
     this.returned = returned;
     this.a0 = a0;
     this.a1 = a1;
     this.a2 = a2;
     this.a3 = a3;
-    this.arguments = null;
-    return this;
-  }
-
-  ExitFrameSlot fill(final Object self, final Object returned, final Object[] arguments) {
-    this.self = self;
-    this.returned = returned;
     this.arguments = arguments;
     return this;
   }

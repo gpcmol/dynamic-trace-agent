@@ -1,6 +1,5 @@
 package org.otel.agent.extension.reload;
 
-import java.util.function.Consumer;
 import org.otel.agent.core.config.ConfigDocument.IgnoredRule;
 import org.otel.agent.core.config.ConfigurationException;
 import org.otel.agent.core.config.XmlConfigurationParser;
@@ -84,7 +83,9 @@ public final class ReloadCoordinator implements ConfigFileWatcher.Listener {
   private void activate(final Snapshot next, final String description) {
     final Snapshot previous = target.activeSnapshot();
     log.resetOnce();
-    report(next, log::warn);
+    for (final IgnoredRule ignored : next.ignoredRules()) {
+      log.warn(ignored.rule().describe() + " is ignored: " + ignored.reason());
+    }
 
     final long start = System.nanoTime();
     target.publish(next);
@@ -113,11 +114,5 @@ public final class ReloadCoordinator implements ConfigFileWatcher.Listener {
                 + ", took "
                 + (System.nanoTime() - start) / 1_000_000
                 + " ms");
-  }
-
-  private static void report(final Snapshot snapshot, final Consumer<String> warn) {
-    for (final IgnoredRule ignored : snapshot.ignoredRules()) {
-      warn.accept(ignored.rule().describe() + " is ignored: " + ignored.reason());
-    }
   }
 }

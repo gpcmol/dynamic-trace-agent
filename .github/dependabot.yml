@@ -1,0 +1,16 @@
+# Docker base images and GitHub Actions. Maven versions are updated with ./lcm.sh, because the
+# OpenTelemetry agent version must change together with the CI matrix and the deployment example
+# (docs/10-code-guidelines.md §6).
+version: 2
+updates:
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /dta-example-app
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

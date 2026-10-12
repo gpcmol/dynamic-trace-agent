@@ -72,4 +72,21 @@ class AgentLogTest {
     assertEquals(
         List.of("[dynamic-trace-agent] first", "[dynamic-trace-agent] after reset"), messages);
   }
+
+  @Test
+  void textFromTheRuleFileCannotForgeLogLines() {
+    new AgentLog(false).warn("key 'a\nWARNING: fake line\r' and \u001b[31mred\u202e\u2028");
+
+    assertEquals(
+        List.of(
+            "[dynamic-trace-agent] key 'a\\u000aWARNING: fake line\\u000d' and"
+                + " \\u001b[31mred\\u202e\\u2028"),
+        messages);
+  }
+
+  @Test
+  void ordinaryTextIsUnchangedAndOverlongTextIsCut() {
+    assertEquals("größe 'x' → ok", AgentLog.printable("größe 'x' → ok"));
+    assertEquals(2_001, AgentLog.printable("x".repeat(5_000)).length());
+  }
 }

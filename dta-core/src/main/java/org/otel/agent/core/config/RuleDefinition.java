@@ -3,6 +3,7 @@ package org.otel.agent.core.config;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * One {@code <rule>} as written in the configuration (paths and condition not compiled yet).
@@ -32,14 +33,9 @@ public record RuleDefinition(
 
   /** Human-readable identity for log messages, e.g. {@code rule #1 (com.example.Garage#park)}. */
   public String describe() {
-    final StringBuilder text = new StringBuilder("rule #").append(position).append(" (");
-    for (int i = 0; i < selectors.size(); i++) {
-      if (i > 0) {
-        text.append(", ");
-      }
-      text.append(selectors.get(i));
-    }
-    return text.append(')').toString();
+    return selectors.stream()
+        .map(Selector::toString)
+        .collect(Collectors.joining(", ", "rule #" + position + " (", ")"));
   }
 
   /** {@code <selector><class name="…"/><method name="…"/></selector>}. */

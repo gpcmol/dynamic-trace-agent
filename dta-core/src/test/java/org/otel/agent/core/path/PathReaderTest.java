@@ -4,11 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.otel.agent.core.value.AttributeValues;
 
 class PathReaderTest {
 
@@ -286,5 +290,60 @@ class PathReaderTest {
               }
             }));
     assertEquals("Piet", reader.readFrom(new Passenger("Piet")));
+  }
+
+  @Nested
+  class Safety {
+
+    public static final class Order {
+      private final AtomicInteger sequence = new AtomicInteger(41);
+
+      public AtomicInteger getSequence() {
+        return sequence;
+      }
+
+      /** Never ends, like a lazily loaded result. */
+      public Iterable<Passenger> getStream() {
+        return () -> Stream.generate(() -> new Passenger("Jan")).iterator();
+      }
+
+      public List<Passenger> getMany() {
+        return Collections.nCopies(AttributeValues.MAX_LIST_SIZE + 500, new Passenger("Jan"));
+      }
+    }
+
+    @Test
+    void aPathCannotChangeApplicationState() throws Exception {
+      final Order order = new Order();
+
+      assertNull(read("$this.sequence.andIncrement", order));
+      assertEquals(41, order.sequence.get());
+    }
+
+    @Test
+    void endlessCollectionIsReadUpToTheLimit() throws Exception {
+      final List<?> names = (List<?>) read("$this.stream.name", new Order());
+
+      assertEquals(AttributeValues.MAX_LIST_SIZE, names.size());
+    }
+
+    @Test
+    void largeCollectionIsTruncated() throws Exception {
+      assertEquals(
+          AttributeValues.MAX_LIST_SIZE, ((List<?>) read("$this.many.name", new Order())).size());
+    }
+
+    @Test
+    void indexIntoAnEndlessCollectionIsBounded() throws Exception {
+      assertEquals("Jan", read("$this.stream[10].name", new Order()));
+      assertNull(read("$this.stream[999999999].name", new Order()));
+    }
+
+    @Test
+    void indexIntoALargeListIsNotLimited() throws Exception {
+      assertEquals(
+          "Jan",
+          read("$this.many[" + (AttributeValues.MAX_LIST_SIZE + 10) + "].name", new Order()));
+    }
   }
 }

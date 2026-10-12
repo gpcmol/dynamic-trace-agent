@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import org.otel.agent.core.value.AttributeValues;
 
 /**
  * Reads the value of a {@link CompiledPath} for one method exit.
@@ -19,6 +20,8 @@ import java.util.Map;
  *       out of range gives {@code null}.
  *   <li>A property applied to an array or {@code Iterable} is applied to every element; all
  *       non-null results are collected into one flat {@code List}.
+ *   <li>At most {@link AttributeValues#MAX_LIST_SIZE} elements of a collection are read, so a huge
+ *       or lazily loaded collection cannot stall the application thread.
  * </ul>
  *
  * <p>Performance: each segment remembers the reader of the last class it saw (a monomorphic inline
@@ -86,42 +89,53 @@ public final class PathReader {
     return resolve(value, position + 1);
   }
 
+  /** Applies the rest of the path to the first {@code MAX_LIST_SIZE} elements. */
   private List<Object> resolveEach(final Object collection, final int position) {
     final List<Object> values = new ArrayList<>();
     if (collection.getClass().isArray()) {
-      final int length = Array.getLength(collection);
+      final int length = Math.min(Array.getLength(collection), AttributeValues.MAX_LIST_SIZE);
       for (int i = 0; i < length; i++) {
         addFlattened(values, resolve(Array.get(collection, i), position));
       }
     } else {
+      int seen = 0;
       for (final Object element : (Iterable<?>) collection) {
+        if (seen++ == AttributeValues.MAX_LIST_SIZE) {
+          break;
+        }
         addFlattened(values, resolve(element, position));
       }
     }
     return values;
   }
 
+  /** Adds a value, or the elements of a collection or array value, without {@code null}s. */
   private static void addFlattened(final List<Object> values, final Object value) {
-    if (value == null) {
-      return;
-    }
     if (value instanceof Collection<?> nested) {
       for (final Object element : nested) {
-        if (element != null) {
-          values.add(element);
+        if (isFull(values)) {
+          return;
         }
+        addNonNull(values, element);
       }
-    } else if (value.getClass().isArray()) {
-      final int length = Array.getLength(value);
+    } else if (value != null && value.getClass().isArray()) {
+      final int length = Math.min(Array.getLength(value), AttributeValues.MAX_LIST_SIZE);
       for (int i = 0; i < length; i++) {
-        final Object element = Array.get(value, i);
-        if (element != null) {
-          values.add(element);
-        }
+        addNonNull(values, Array.get(value, i));
       }
     } else {
-      values.add(value);
+      addNonNull(values, value);
     }
+  }
+
+  private static void addNonNull(final List<Object> values, final Object element) {
+    if (element != null && !isFull(values)) {
+      values.add(element);
+    }
+  }
+
+  private static boolean isFull(final List<Object> values) {
+    return values.size() >= AttributeValues.MAX_LIST_SIZE;
   }
 
   private static boolean isCollectionLike(final Object value) {
@@ -184,7 +198,10 @@ public final class PathReader {
       if (value instanceof List<?> list) {
         return index < list.size() ? list.get(index) : null;
       }
-      if (value instanceof Iterable<?> iterable) {
+      // Other Iterables are walked; one of unknown size only as far as MAX_LIST_SIZE.
+      final int limit =
+          value instanceof Collection<?> sized ? sized.size() : AttributeValues.MAX_LIST_SIZE;
+      if (value instanceof Iterable<?> iterable && index < limit) {
         int position = 0;
         for (final Object element : iterable) {
           if (position++ == index) {
