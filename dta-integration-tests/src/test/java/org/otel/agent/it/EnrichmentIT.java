@@ -27,12 +27,18 @@ import org.otel.agent.it.OtlpReceiver.ReceivedSpan;
 class EnrichmentIT {
 
   private static final String BMW =
-      "{\"brand\":\"bmw\",\"model\":\"x5\",\"year\":2024,\"mileage\":10000,"
-          + "\"passengers\":[{\"name\":\"Jan\"},{\"name\":\"Piet\"}]}";
+      """
+      {"brand": "bmw", "model": "x5", "year": 2024, "mileage": 10000,
+       "passengers": [{"name": "Jan"}, {"name": "Piet"}]}
+      """;
   private static final String TESLA =
-      "{\"brand\":\"tesla\",\"model\":\"3\",\"mileage\":10,\"passengers\":[{\"name\":\"Eva\"}]}";
+      """
+      {"brand": "tesla", "model": "3", "mileage": 10, "passengers": [{"name": "Eva"}]}
+      """;
   private static final String GARAGE_SELECTOR =
-      "<selector><class name=\"com.example.Garage\"/><method name=\"park\"/></selector>";
+      """
+      <selector><class name="com.example.Garage"/><method name="park"/></selector>
+      """;
 
   private static Path directory;
   private static Path config;
@@ -108,7 +114,11 @@ class EnrichmentIT {
   @Test
   @Order(4)
   void attributeChangeAppliesWithoutRetransformation() throws Exception {
-    write(rule("<attribute key=\"km\" path=\"$arg0.mileage\"/>"));
+    write(
+        rule(
+            """
+            <attribute key="km" path="$arg0.mileage"/>
+            """));
     awaitLoad(1, 0);
 
     app.post("/cars", TESLA);
@@ -132,7 +142,11 @@ class EnrichmentIT {
   @Test
   @Order(6)
   void unknownPropertyIgnoresTheRuleWithAWarning() throws Exception {
-    write(rule("<attribute key=\"x\" path=\"$return.missing\"/>"));
+    write(
+        rule(
+            """
+            <attribute key="x" path="$return.missing"/>
+            """));
     awaitLoad(1, 0);
 
     app.post("/cars", BMW);
@@ -189,18 +203,33 @@ class EnrichmentIT {
   @Order(10)
   void typoInMethodNameIsReported() throws Exception {
     write(
-        "<configuration><dynamic><rule><selector><class name=\"com.example.Garage\"/>"
-            + "<method name=\"parkk\"/></selector></rule></dynamic></configuration>");
+        """
+        <configuration>
+          <dynamic>
+            <rule>
+              <selector><class name="com.example.Garage"/><method name="parkk"/></selector>
+            </rule>
+          </dynamic>
+        </configuration>
+        """);
     awaitLoad(1, 1);
 
     app.awaitLog("parkk is not a public method of com.example.Garage");
   }
 
   private static String rule(final String body) {
-    return "<configuration><static><attribute key=\"debug\" value=\"true\"/></static><dynamic><rule>"
-        + GARAGE_SELECTOR
-        + body
-        + "</rule></dynamic></configuration>";
+    return """
+        <configuration>
+          <static><attribute key="debug" value="true"/></static>
+          <dynamic>
+            <rule>
+              %s
+              %s
+            </rule>
+          </dynamic>
+        </configuration>
+        """
+        .formatted(GARAGE_SELECTOR, body);
   }
 
   /** Replaces the configuration file with a new modification time. */

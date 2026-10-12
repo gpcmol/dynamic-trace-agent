@@ -36,15 +36,17 @@ class XmlConfigurationParserTest {
   }
 
   private static String dynamic(final String rules) {
-    return "<configuration><dynamic>" + rules + "</dynamic></configuration>";
+    return "<configuration><dynamic>%s</dynamic></configuration>".formatted(rules);
   }
 
   private static String rule(final String body) {
-    return dynamic("<rule>" + body + "</rule>");
+    return dynamic("<rule>%s</rule>".formatted(body));
   }
 
   private static final String GARAGE_SELECTOR =
-      "<selector><class name=\"com.example.Garage\"/><method name=\"park\"/></selector>";
+      """
+      <selector><class name="com.example.Garage"/><method name="park"/></selector>
+      """;
 
   @Nested
   class ValidDocuments {
@@ -78,10 +80,18 @@ class XmlConfigurationParserTest {
     void markerOnlyRuleWithoutAttributes() throws Exception {
       final ConfigDocument document =
           parse(
-              "<configuration><static><attribute key=\"debug\" value=\"true\"/></static>"
-                  + "<dynamic><rule>"
-                  + GARAGE_SELECTOR
-                  + "<when>$arg0.brand == 'bmw'</when></rule></dynamic></configuration>");
+              """
+              <configuration>
+                <static><attribute key="debug" value="true"/></static>
+                <dynamic>
+                  <rule>
+                    %s
+                    <when>$arg0.brand == 'bmw'</when>
+                  </rule>
+                </dynamic>
+              </configuration>
+              """
+                  .formatted(GARAGE_SELECTOR));
 
       assertTrue(document.rules().get(0).attributes().isEmpty());
     }
@@ -91,9 +101,11 @@ class XmlConfigurationParserTest {
       final RuleDefinition rule =
           parse(
                   rule(
-                      GARAGE_SELECTOR
-                          + "<selector><class name=\"com.example.Car\"/>"
-                          + "<method name=\"drive\"/></selector>"))
+                      """
+                      %s
+                      <selector><class name="com.example.Car"/><method name="drive"/></selector>
+                      """
+                          .formatted(GARAGE_SELECTOR)))
               .rules()
               .get(0);
 
@@ -109,8 +121,9 @@ class XmlConfigurationParserTest {
       final RuleDefinition rule =
           parse(
                   rule(
-                      "<selector><class name=\"com.example.Outer$Inner\"/>"
-                          + "<method name=\"run\"/></selector>"))
+                      """
+                      <selector><class name="com.example.Outer$Inner"/><method name="run"/></selector>
+                      """))
               .rules()
               .get(0);
 
@@ -134,7 +147,8 @@ class XmlConfigurationParserTest {
     void keysAndValuesAreNotTrimmed() throws Exception {
       final StaticAttribute attribute =
           parse(
-                  "<configuration><static><attribute key=\" team\" value=\" a \"/></static></configuration>")
+"""
+<configuration><static><attribute key=" team" value=" a "/></static></configuration>""")
               .staticAttributes()
               .get(0);
 
@@ -148,9 +162,12 @@ class XmlConfigurationParserTest {
       assertEquals(
           key,
           parse(
-                  "<configuration><static><attribute key=\""
-                      + key
-                      + "\" value=\"v\"/></static></configuration>")
+                  """
+                  <configuration>
+                    <static><attribute key="%s" value="v"/></static>
+                  </configuration>
+                  """
+                      .formatted(key))
               .staticAttributes()
               .get(0)
               .key());
@@ -186,10 +203,13 @@ class XmlConfigurationParserTest {
     void externalEntityIsNeverRead(@TempDir final Path directory) throws IOException {
       final Path secret = Files.writeString(directory.resolve("secret.txt"), "TOP-SECRET");
       final String xml =
-          "<!DOCTYPE configuration [<!ENTITY leak SYSTEM \""
-              + secret.toUri()
-              + "\">]><configuration><static><attribute key=\"x\" value=\"&leak;\"/>"
-              + "</static></configuration>";
+          """
+          <!DOCTYPE configuration [<!ENTITY leak SYSTEM "%s">]>
+          <configuration>
+            <static><attribute key="x" value="&leak;"/></static>
+          </configuration>
+          """
+              .formatted(secret.toUri());
 
       final ConfigurationException exception = rejected(xml);
 
@@ -207,12 +227,19 @@ class XmlConfigurationParserTest {
 
     @Test
     void namespacedRootElement() {
-      rejected("<configuration xmlns=\"urn:x\"/>");
+      rejected(
+"""
+<configuration xmlns="urn:x"/>""");
     }
 
     @Test
     void attributeOnRoot() {
-      assertTrue(rejected("<configuration version=\"1\"/>").getMessage().contains("version"));
+      assertTrue(
+          rejected(
+"""
+<configuration version="1"/>""")
+              .getMessage()
+              .contains("version"));
     }
 
     @Test
@@ -231,15 +258,20 @@ class XmlConfigurationParserTest {
 
     @Test
     void unknownElementInStatic() {
-      rejected("<configuration><static><attr key=\"a\" value=\"b\"/></static></configuration>");
+      rejected(
+"""
+<configuration><static><attr key="a" value="b"/></static></configuration>""");
     }
 
     @Test
     void unknownAttributeOnStaticAttribute() {
       assertTrue(
           rejected(
-                  "<configuration><static><attribute key=\"a\" value=\"b\" type=\"x\"/>"
-                      + "</static></configuration>")
+                  """
+                  <configuration>
+                    <static><attribute key="a" value="b" type="x"/></static>
+                  </configuration>
+                  """)
               .getMessage()
               .contains("type"));
     }
@@ -247,8 +279,11 @@ class XmlConfigurationParserTest {
     @Test
     void namespacedAttribute() {
       rejected(
-          "<configuration xmlns:x=\"urn:x\"><static><attribute key=\"a\" value=\"b\" x:y=\"z\"/>"
-              + "</static></configuration>");
+          """
+          <configuration xmlns:x="urn:x">
+            <static><attribute key="a" value="b" x:y="z"/></static>
+          </configuration>
+          """);
     }
 
     @Test
@@ -259,21 +294,29 @@ class XmlConfigurationParserTest {
     @Test
     void ruleWithoutSelector() {
       assertTrue(
-          rejected(rule("<attribute key=\"a\" path=\"$this.x\"/>"))
+          rejected(
+                  rule(
+"""
+<attribute key="a" path="$this.x"/>"""))
               .getMessage()
               .contains("<selector>"));
     }
 
     @Test
     void selectorWithoutMethod() {
-      rejected(rule("<selector><class name=\"com.example.Garage\"/></selector>"));
+      rejected(
+          rule(
+"""
+<selector><class name="com.example.Garage"/></selector>"""));
     }
 
     @Test
     void selectorWithTwoClasses() {
       rejected(
           rule(
-              "<selector><class name=\"a.B\"/><class name=\"a.C\"/><method name=\"m\"/></selector>"));
+              """
+              <selector><class name="a.B"/><class name="a.C"/><method name="m"/></selector>
+              """));
     }
 
     @Test
@@ -293,25 +336,40 @@ class XmlConfigurationParserTest {
     @Test
     void blankStaticKey() {
       rejected(
-          "<configuration><static><attribute key=\" \" value=\"b\"/></static></configuration>");
+          """
+          <configuration>
+            <static><attribute key=" " value="b"/></static>
+          </configuration>
+          """);
     }
 
     @Test
     void missingStaticValue() {
       assertTrue(
-          rejected("<configuration><static><attribute key=\"a\"/></static></configuration>")
+          rejected(
+"""
+<configuration><static><attribute key="a"/></static></configuration>""")
               .getMessage()
               .contains("value"));
     }
 
     @Test
     void missingPath() {
-      rejected(rule(GARAGE_SELECTOR + "<attribute key=\"a\"/>"));
+      rejected(
+          rule(
+              """
+              %s
+              <attribute key="a"/>
+              """
+                  .formatted(GARAGE_SELECTOR)));
     }
 
     @Test
     void blankClassName() {
-      rejected(rule("<selector><class name=\"\"/><method name=\"park\"/></selector>"));
+      rejected(
+          rule(
+"""
+<selector><class name=""/><method name="park"/></selector>"""));
     }
 
     @ParameterizedTest
@@ -321,9 +379,10 @@ class XmlConfigurationParserTest {
       assertTrue(
           rejected(
                   rule(
-                      "<selector><class name=\""
-                          + className
-                          + "\"/><method name=\"park\"/></selector>"))
+                      """
+                      <selector><class name="%s"/><method name="park"/></selector>
+                      """
+                          .formatted(className)))
               .getMessage()
               .contains("class name"));
     }
@@ -334,9 +393,10 @@ class XmlConfigurationParserTest {
       assertTrue(
           rejected(
                   rule(
-                      "<selector><class name=\"com.example.Garage\"/><method name=\""
-                          + methodName
-                          + "\"/></selector>"))
+                      """
+                      <selector><class name="com.example.Garage"/><method name="%s"/></selector>
+                      """
+                          .formatted(methodName)))
               .getMessage()
               .contains("method name"));
     }
@@ -349,9 +409,18 @@ class XmlConfigurationParserTest {
     void duplicateKeyAcrossStaticAndDynamic() {
       final ConfigurationException exception =
           rejected(
-              "<configuration><static><attribute key=\"brand\" value=\"x\"/></static><dynamic><rule>"
-                  + GARAGE_SELECTOR
-                  + "<attribute key=\"brand\" path=\"$arg0.brand\"/></rule></dynamic></configuration>");
+              """
+              <configuration>
+                <static><attribute key="brand" value="x"/></static>
+                <dynamic>
+                  <rule>
+                    %s
+                    <attribute key="brand" path="$arg0.brand"/>
+                  </rule>
+                </dynamic>
+              </configuration>
+              """
+                  .formatted(GARAGE_SELECTOR));
 
       assertTrue(exception.getMessage().contains("'brand'"));
     }
@@ -360,11 +429,17 @@ class XmlConfigurationParserTest {
     void duplicateKeyAcrossRules() {
       rejected(
           dynamic(
-              "<rule>"
-                  + GARAGE_SELECTOR
-                  + "<attribute key=\"k\" path=\"$this.a\"/></rule><rule>"
-                  + "<selector><class name=\"com.example.Car\"/><method name=\"drive\"/></selector>"
-                  + "<attribute key=\"k\" path=\"$this.b\"/></rule>"));
+              """
+              <rule>
+                %s
+                <attribute key="k" path="$this.a"/>
+              </rule>
+              <rule>
+                <selector><class name="com.example.Car"/><method name="drive"/></selector>
+                <attribute key="k" path="$this.b"/>
+              </rule>
+              """
+                  .formatted(GARAGE_SELECTOR)));
     }
 
     @Test
@@ -372,9 +447,12 @@ class XmlConfigurationParserTest {
       final String key = "k".repeat(XmlConfigurationParser.MAX_KEY_LENGTH + 1);
 
       rejected(
-          "<configuration><static><attribute key=\""
-              + key
-              + "\" value=\"v\"/></static></configuration>");
+          """
+          <configuration>
+            <static><attribute key="%s" value="v"/></static>
+          </configuration>
+          """
+              .formatted(key));
     }
 
     @Test
@@ -387,7 +465,8 @@ class XmlConfigurationParserTest {
 
     @Test
     void sameSelectorInTwoRules() {
-      rejected(dynamic("<rule>" + GARAGE_SELECTOR + "</rule><rule>" + GARAGE_SELECTOR + "</rule>"));
+      rejected(
+          dynamic("<rule>%s</rule><rule>%s</rule>".formatted(GARAGE_SELECTOR, GARAGE_SELECTOR)));
     }
   }
 
@@ -397,7 +476,10 @@ class XmlConfigurationParserTest {
     @Test
     void onlyRulesAreAllowedInDynamic() {
       assertTrue(
-          rejected(dynamic("<attribute key=\"brand\" path=\"$arg0.brand\"/>"))
+          rejected(
+                  dynamic(
+"""
+<attribute key="brand" path="$arg0.brand"/>"""))
               .getMessage()
               .contains("unknown element <attribute>"));
     }
@@ -422,11 +504,15 @@ class XmlConfigurationParserTest {
       final ConfigDocument document =
           parse(
               dynamic(
-                  "<rule><selector><class name=\""
-                      + className
-                      + "\"/><method name=\"size\"/></selector></rule><rule>"
-                      + GARAGE_SELECTOR
-                      + "</rule>"));
+                  """
+                  <rule>
+                    <selector><class name="%s"/><method name="size"/></selector>
+                  </rule>
+                  <rule>
+                    %s
+                  </rule>
+                  """
+                      .formatted(className, GARAGE_SELECTOR)));
 
       assertEquals(1, document.rules().size());
       assertEquals(2, document.rules().get(0).position());
@@ -439,9 +525,11 @@ class XmlConfigurationParserTest {
       final ConfigDocument document =
           parse(
               rule(
-                  GARAGE_SELECTOR
-                      + "<selector><class name=\"java.util.ArrayList\"/>"
-                      + "<method name=\"add\"/></selector>"));
+                  """
+                  %s
+                  <selector><class name="java.util.ArrayList"/><method name="add"/></selector>
+                  """
+                      .formatted(GARAGE_SELECTOR)));
 
       assertTrue(document.rules().isEmpty());
       assertEquals(1, document.ignoredRules().size());
@@ -450,7 +538,10 @@ class XmlConfigurationParserTest {
     @Test
     void similarLookingPackageIsNotProtected() throws Exception {
       final ConfigDocument document =
-          parse(rule("<selector><class name=\"javaapp.Main\"/><method name=\"run\"/></selector>"));
+          parse(
+              rule(
+"""
+<selector><class name="javaapp.Main"/><method name="run"/></selector>"""));
 
       assertEquals(1, document.rules().size());
     }

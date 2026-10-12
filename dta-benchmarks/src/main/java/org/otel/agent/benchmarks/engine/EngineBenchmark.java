@@ -117,26 +117,34 @@ public class EngineBenchmark {
   private String configuration() {
     final StringBuilder dynamic = new StringBuilder();
     for (int i = 0; i < attributes; i++) {
-      dynamic
-          .append("<attribute key=\"a")
-          .append(i)
-          .append("\" path=\"")
-          .append(PATHS[i % PATHS.length])
-          .append("\"/>");
+      dynamic.append(
+          """
+          <attribute key="a%d" path="%s"/>
+          """
+              .formatted(i, PATHS[i % PATHS.length]));
     }
-    return "<configuration><static>"
-        + "<attribute key=\"debug\" value=\"true\"/><attribute key=\"domain\" value=\"cars\"/>"
-        + "<attribute key=\"team\" value=\"t\"/><attribute key=\"environment\" value=\"prod\"/>"
-        + "<attribute key=\"region\" value=\"eu\"/></static><dynamic>"
-        + "<rule><selector><class name=\""
-        + Garage.class.getName()
-        + "\"/><method name=\"park\"/></selector>"
-        + "<when>$arg0.brand in ['bmw', 'audi', 'vw', 'mercedes'] and $arg0.mileage gt 0</when>"
-        + dynamic
-        + "</rule>"
-        + "<rule><selector><class name=\"com.example.Elsewhere\"/>"
-        + "<method name=\"inspect\"/></selector></rule>"
-        + "</dynamic></configuration>";
+    return """
+        <configuration>
+          <static>
+            <attribute key="debug" value="true"/>
+            <attribute key="domain" value="cars"/>
+            <attribute key="team" value="t"/>
+            <attribute key="environment" value="prod"/>
+            <attribute key="region" value="eu"/>
+          </static>
+          <dynamic>
+            <rule>
+              <selector><class name="%s"/><method name="park"/></selector>
+              <when>$arg0.brand in ['bmw', 'audi', 'vw', 'mercedes'] and $arg0.mileage gt 0</when>
+              %s
+            </rule>
+            <rule>
+              <selector><class name="com.example.Elsewhere"/><method name="inspect"/></selector>
+            </rule>
+          </dynamic>
+        </configuration>
+        """
+        .formatted(Garage.class.getName(), dynamic);
   }
 
   private static int site(final String method) {

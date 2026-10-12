@@ -48,27 +48,25 @@ class EnrichmentEngineTest {
   }
 
   private void configure(final String statics, final String rules) throws Exception {
-    engine.publish(
-        SnapshotCompiler.compile(
-            new XmlConfigurationParser()
-                .parse(
-                    "<configuration><static>"
-                        + statics
-                        + "</static><dynamic>"
-                        + rules
-                        + "</dynamic></configuration>"),
-            version++));
+    final String xml =
+        """
+        <configuration>
+          <static>%s</static>
+          <dynamic>%s</dynamic>
+        </configuration>
+        """
+            .formatted(statics, rules);
+    engine.publish(SnapshotCompiler.compile(new XmlConfigurationParser().parse(xml), version++));
   }
 
   private static String rule(final String simpleClass, final String method, final String body) {
-    return "<rule><selector><class name=\""
-        + FIXTURES
-        + simpleClass
-        + "\"/><method name=\""
-        + method
-        + "\"/></selector>"
-        + body
-        + "</rule>";
+    return """
+        <rule>
+          <selector><class name="%s%s"/><method name="%s"/></selector>
+          %s
+        </rule>
+        """
+        .formatted(FIXTURES, simpleClass, method, body);
   }
 
   private static int site(final Class<?> type, final String name) {
@@ -105,16 +103,19 @@ class EnrichmentEngineTest {
   @Test
   void enrichesTheCurrentSpanWithStaticAndDynamicAttributes() throws Exception {
     configure(
-        "<attribute key=\"debug\" value=\"true\"/>",
+"""
+<attribute key="debug" value="true"/>""",
         rule(
             "Garage",
             "park",
-            "<when>$arg0.brand == 'bmw' and $arg0.mileage gt 0</when>"
-                + "<attribute key=\"brand\" path=\"$arg0.brand\"/>"
-                + "<attribute key=\"mileage\" path=\"$arg0.mileage\"/>"
-                + "<attribute key=\"second\" path=\"$arg0.passengers[1].name\"/>"
-                + "<attribute key=\"all\" path=\"$arg0.passengers.name\"/>"
-                + "<attribute key=\"status\" path=\"$return.status\"/>"));
+            """
+            <when>$arg0.brand == 'bmw' and $arg0.mileage gt 0</when>
+            <attribute key="brand" path="$arg0.brand"/>
+            <attribute key="mileage" path="$arg0.mileage"/>
+            <attribute key="second" path="$arg0.passengers[1].name"/>
+            <attribute key="all" path="$arg0.passengers.name"/>
+            <attribute key="status" path="$return.status"/>
+            """));
 
     final SpanData span = parkInsideSpan(BMW);
 
@@ -131,11 +132,13 @@ class EnrichmentEngineTest {
   @Test
   void falseConditionTouchesNothing() throws Exception {
     configure(
-        "<attribute key=\"debug\" value=\"true\"/>",
+"""
+<attribute key="debug" value="true"/>""",
         rule(
             "Garage",
             "park",
-            "<when>$arg0.brand == 'audi'</when><attribute key=\"brand\" path=\"$arg0.brand\"/>"));
+"""
+<when>$arg0.brand == 'audi'</when><attribute key="brand" path="$arg0.brand"/>"""));
 
     final SpanData span = parkInsideSpan(BMW);
 
@@ -145,7 +148,13 @@ class EnrichmentEngineTest {
 
   @Test
   void createsOneFallbackSpanOutsideATrace() throws Exception {
-    configure("", rule("Garage", "park", "<attribute key=\"brand\" path=\"$arg0.brand\"/>"));
+    configure(
+        "",
+        rule(
+            "Garage",
+            "park",
+"""
+<attribute key="brand" path="$arg0.brand"/>"""));
 
     engine.onExit(
         site(Garage.class, "park"), new Garage(), new Result(true, "ok"), BMW, null, null, null);
@@ -164,7 +173,10 @@ class EnrichmentEngineTest {
         rule(
             "Garage",
             "park",
-            "<attribute key=\"broken\" path=\"$arg0.broken\"/><attribute key=\"brand\" path=\"$arg0.brand\"/>"));
+            """
+            <attribute key="broken" path="$arg0.broken"/>
+            <attribute key="brand" path="$arg0.brand"/>
+            """));
 
     final SpanData span = parkInsideSpan(BMW);
 
@@ -179,11 +191,17 @@ class EnrichmentEngineTest {
         rule(
                 "Car",
                 "drive",
-                "<when>$return == 'nope'</when><attribute key=\"car\" path=\"$this.brand\"/>")
+                """
+                <when>$return == 'nope'</when>
+                <attribute key="car" path="$this.brand"/>
+                """)
             + rule(
                 "SportsCar",
                 "drive",
-                "<when>$return == 'VROOM'</when><attribute key=\"sports\" path=\"$this.brand\"/>"));
+                """
+                <when>$return == 'VROOM'</when>
+                <attribute key="sports" path="$this.brand"/>
+                """));
 
     final Span server = tracer.spanBuilder("drive").startSpan();
     try (Scope ignored = server.makeCurrent()) {
@@ -206,7 +224,13 @@ class EnrichmentEngineTest {
 
   @Test
   void allArgumentsVariantReadsHighArguments() throws Exception {
-    configure("", rule("Garage", "many", "<attribute key=\"fifthBlank\" path=\"$arg4.blank\"/>"));
+    configure(
+        "",
+        rule(
+            "Garage",
+            "many",
+"""
+<attribute key="fifthBlank" path="$arg4.blank"/>"""));
 
     engine.onExitAllArgs(
         site(Garage.class, "many"), new Garage(), "e", new Object[] {"a", "b", "c", "d", "eeee"});
@@ -226,10 +250,22 @@ class EnrichmentEngineTest {
 
   @Test
   void reloadRebindsWithTheNewConfiguration() throws Exception {
-    configure("", rule("Garage", "park", "<attribute key=\"brand\" path=\"$arg0.brand\"/>"));
+    configure(
+        "",
+        rule(
+            "Garage",
+            "park",
+"""
+<attribute key="brand" path="$arg0.brand"/>"""));
     assertEquals("bmw", parkInsideSpan(BMW).getAttributes().get(AttributeKey.stringKey("brand")));
 
-    configure("", rule("Garage", "park", "<attribute key=\"km\" path=\"$arg0.mileage\"/>"));
+    configure(
+        "",
+        rule(
+            "Garage",
+            "park",
+"""
+<attribute key="km" path="$arg0.mileage"/>"""));
     final SpanData span = parkInsideSpan(BMW);
 
     assertNull(span.getAttributes().get(AttributeKey.stringKey("brand")));
@@ -238,7 +274,13 @@ class EnrichmentEngineTest {
 
   @Test
   void nestedExitOnTheSameThreadIsSkipped() throws Exception {
-    configure("", rule("Garage", "park", "<attribute key=\"brand\" path=\"$arg0.brand\"/>"));
+    configure(
+        "",
+        rule(
+            "Garage",
+            "park",
+"""
+<attribute key="brand" path="$arg0.brand"/>"""));
     final ExitFrameSlot outer = ExitFrameSlot.tryAcquire();
     try {
       engine.onExit(site(Garage.class, "park"), new Garage(), null, BMW, null, null, null);

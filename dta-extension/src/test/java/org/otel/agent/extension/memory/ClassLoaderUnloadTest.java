@@ -65,20 +65,22 @@ class ClassLoaderUnloadTest {
                 type.getName(), "park", "(Ljava/lang/Object;)Ljava/lang/Object;"));
 
     for (int version = 1; version <= 5; version++) {
-      engine.publish(
-          SnapshotCompiler.compile(
-              new XmlConfigurationParser()
-                  .parse(
-                      "<configuration><static><attribute key=\"v\" value=\""
-                          + version
-                          + "\"/></static><dynamic><rule><selector><class name=\""
-                          + type.getName()
-                          + "\"/><method name=\"park\"/></selector>"
-                          + "<when>$this.brand == 'bmw'</when>"
-                          + "<attribute key=\"brand\" path=\"$this.brand\"/>"
-                          + "<attribute key=\"other\" path=\"$arg0.brand\"/>"
-                          + "</rule></dynamic></configuration>"),
-              version));
+      final String xml =
+          """
+          <configuration>
+            <static><attribute key="v" value="%d"/></static>
+            <dynamic>
+              <rule>
+                <selector><class name="%s"/><method name="park"/></selector>
+                <when>$this.brand == 'bmw'</when>
+                <attribute key="brand" path="$this.brand"/>
+                <attribute key="other" path="$arg0.brand"/>
+              </rule>
+            </dynamic>
+          </configuration>
+          """
+              .formatted(version, type.getName());
+      engine.publish(SnapshotCompiler.compile(new XmlConfigurationParser().parse(xml), version));
       final Span span = provider.get("test").spanBuilder("call").startSpan();
       try (Scope scope = span.makeCurrent()) {
         engine.onExit(site, instance, instance, instance, null, null, null);

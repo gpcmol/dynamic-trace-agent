@@ -20,14 +20,21 @@ import org.otel.agent.core.plan.TransformationPlan;
 class SnapshotCompilerTest {
 
   private static final String GARAGE =
-      "<selector><class name=\"com.example.Garage\"/><method name=\"park\"/></selector>";
+      """
+      <selector><class name="com.example.Garage"/><method name="park"/></selector>
+      """;
 
   private static Snapshot compile(final String xml) throws ConfigurationException {
     return SnapshotCompiler.compile(new XmlConfigurationParser().parse(xml), 7);
   }
 
   private static String rules(final String body) {
-    return "<configuration><dynamic>" + body + "</dynamic></configuration>";
+    return """
+        <configuration>
+          <dynamic>%s</dynamic>
+        </configuration>
+        """
+        .formatted(body);
   }
 
   @Test
@@ -57,9 +64,13 @@ class SnapshotCompilerTest {
             () ->
                 compile(
                     rules(
-                        "<rule>"
-                            + GARAGE
-                            + "<attribute key=\"brand\" path=\"$arg0..brand\"/></rule>")));
+                        """
+                        <rule>
+                          %s
+                          <attribute key="brand" path="$arg0..brand"/>
+                        </rule>
+                        """
+                            .formatted(GARAGE))));
 
     assertTrue(exception.getMessage().contains("rule #1"));
     assertTrue(exception.getMessage().contains("'brand'"));
@@ -70,11 +81,16 @@ class SnapshotCompilerTest {
     final Snapshot snapshot =
         compile(
             rules(
-                "<rule>"
-                    + GARAGE
-                    + "<when>$arg0.brand &amp;&amp; true</when></rule>"
-                    + "<rule><selector><class name=\"com.example.Car\"/>"
-                    + "<method name=\"drive\"/></selector></rule>"));
+                """
+                <rule>
+                  %s
+                  <when>$arg0.brand &amp;&amp; true</when>
+                </rule>
+                <rule>
+                  <selector><class name="com.example.Car"/><method name="drive"/></selector>
+                </rule>
+                """
+                    .formatted(GARAGE)));
 
     assertEquals(1, snapshot.rules().size());
     assertEquals(2, snapshot.rules().get(0).definition().position());
@@ -88,10 +104,14 @@ class SnapshotCompilerTest {
     final Snapshot snapshot =
         compile(
             rules(
-                "<rule>"
-                    + GARAGE
-                    + "<when>size($arg5.items) gt 0 or $arg1 == 'x'</when>"
-                    + "<attribute key=\"a\" path=\"$arg2.name\"/></rule>"));
+                """
+                <rule>
+                  %s
+                  <when>size($arg5.items) gt 0 or $arg1 == 'x'</when>
+                  <attribute key="a" path="$arg2.name"/>
+                </rule>
+                """
+                    .formatted(GARAGE)));
 
     assertEquals(5, snapshot.rules().get(0).maxArgumentIndex());
     assertTrue(snapshot.plan().entries().iterator().next().allArguments());
@@ -102,8 +122,11 @@ class SnapshotCompilerTest {
     final Snapshot snapshot =
         compile(
             rules(
-                "<rule><selector><class name=\"java.util.ArrayList\"/>"
-                    + "<method name=\"add\"/></selector></rule>"));
+                """
+                <rule>
+                  <selector><class name="java.util.ArrayList"/><method name="add"/></selector>
+                </rule>
+                """));
 
     assertFalse(snapshot.isEnabled());
     assertEquals(1, snapshot.ignoredRules().size());

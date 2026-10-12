@@ -16,8 +16,15 @@ import org.otel.agent.extension.diag.AgentLog;
 class ReloadCoordinatorTest {
 
   private static final String GARAGE_RULE =
-      "<configuration><dynamic><rule><selector><class name=\"com.example.Garage\"/>"
-          + "<method name=\"park\"/></selector></rule></dynamic></configuration>";
+      """
+      <configuration>
+        <dynamic>
+          <rule>
+            <selector><class name="com.example.Garage"/><method name="park"/></selector>
+          </rule>
+        </dynamic>
+      </configuration>
+      """;
 
   /** Records what the coordinator publishes, in order. */
   private static final class RecordingTarget implements ReloadCoordinator.Target {

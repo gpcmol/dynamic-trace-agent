@@ -24,21 +24,24 @@ class RuleBinderTest {
   private static final String PKG = BindingFixtures.class.getName() + "$";
 
   private static Snapshot snapshot(final String rules) throws Exception {
-    return SnapshotCompiler.compile(
-        new XmlConfigurationParser()
-            .parse("<configuration><dynamic>" + rules + "</dynamic></configuration>"),
-        1);
+    final String xml =
+        """
+        <configuration>
+          <dynamic>%s</dynamic>
+        </configuration>
+        """
+            .formatted(rules);
+    return SnapshotCompiler.compile(new XmlConfigurationParser().parse(xml), 1);
   }
 
   private static String rule(final String className, final String method, final String body) {
-    return "<rule><selector><class name=\""
-        + PKG
-        + className
-        + "\"/><method name=\""
-        + method
-        + "\"/></selector>"
-        + body
-        + "</rule>";
+    return """
+        <rule>
+          <selector><class name="%s%s"/><method name="%s"/></selector>
+          %s
+        </rule>
+        """
+        .formatted(PKG, className, method, body);
   }
 
   private static Method method(final Class<?> type, final String name) throws Exception {
@@ -65,8 +68,10 @@ class RuleBinderTest {
                 rule(
                     "Garage",
                     "park",
-                    "<when>$arg0.brand == 'bmw'</when>"
-                        + "<attribute key=\"accepted\" path=\"$return.accepted\"/>")),
+                    """
+                    <when>$arg0.brand == 'bmw'</when>
+                    <attribute key="accepted" path="$return.accepted"/>
+                    """)),
             Garage.class,
             method(Garage.class, "park"));
 
@@ -114,11 +119,17 @@ class RuleBinderTest {
                 rule(
                         "Car",
                         "drive",
-                        "<when>$return == 'nope'</when><attribute key=\"a\" path=\"$this.brand\"/>")
+                        """
+                        <when>$return == 'nope'</when>
+                        <attribute key="a" path="$this.brand"/>
+                        """)
                     + rule(
                         "SportsCar",
                         "drive",
-                        "<when>$return == 'VROOM'</when><attribute key=\"b\" path=\"$this.brand\"/>")),
+                        """
+                        <when>$return == 'VROOM'</when>
+                        <attribute key="b" path="$this.brand"/>
+                        """)),
             SportsCar.class,
             method(SportsCar.class, "drive"));
 
@@ -151,7 +162,12 @@ class RuleBinderTest {
   void unknownPropertyOnFinalTypeIsAProblem() throws Exception {
     final MethodBinding binding =
         RuleBinder.bind(
-            snapshot(rule("Garage", "park", "<attribute key=\"x\" path=\"$return.missing\"/>")),
+            snapshot(
+                rule(
+                    "Garage",
+                    "park",
+"""
+<attribute key="x" path="$return.missing"/>""")),
             Garage.class,
             method(Garage.class, "park"));
 
@@ -164,7 +180,12 @@ class RuleBinderTest {
     // Car is not final: a subclass may have getColour(), so the rule stays active.
     final MethodBinding binding =
         RuleBinder.bind(
-            snapshot(rule("Garage", "park", "<attribute key=\"x\" path=\"$arg0.colour\"/>")),
+            snapshot(
+                rule(
+                    "Garage",
+                    "park",
+"""
+<attribute key="x" path="$arg0.colour"/>""")),
             Garage.class,
             method(Garage.class, "park"));
 

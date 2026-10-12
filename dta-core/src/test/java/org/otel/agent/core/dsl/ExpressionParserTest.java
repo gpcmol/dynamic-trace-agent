@@ -98,7 +98,11 @@ class ExpressionParserTest {
   @Test
   void membershipWithLiteralList() throws Exception {
     final Membership membership =
-        assertInstanceOf(Membership.class, parse("$arg0.brand in ['bmw', \"audi\", null]"));
+        assertInstanceOf(
+            Membership.class,
+            parse(
+"""
+$arg0.brand in ['bmw', "audi", null]"""));
 
     assertEquals(
         List.of(new Literal("bmw"), new Literal("audi"), new Literal(null)),

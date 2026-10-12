@@ -83,18 +83,27 @@ class ReloadSoakTest {
   private static String configuration(final int i) {
     final String attribute =
         i % 3 == 0
-            ? "<attribute key=\"brand" + (i % 7) + "\" path=\"$arg0.brand\"/>"
-            : "<attribute key=\"km\" path=\"$arg0.mileage\"/>"
-                + "<attribute key=\"names\" path=\"$arg0.passengers.name\"/>";
-    final String when = i % 2 == 0 ? "<when>$arg0.mileage gt " + i + "</when>" : "";
-    return "<configuration><static><attribute key=\"run\" value=\""
-        + i
-        + "\"/></static><dynamic><rule><selector><class name=\""
-        + GARAGE
-        + "\"/><method name=\"park\"/></selector>"
-        + when
-        + attribute
-        + "</rule></dynamic></configuration>";
+            ? """
+                <attribute key="brand%d" path="$arg0.brand"/>
+                """
+                .formatted(i % 7)
+            : """
+                <attribute key="km" path="$arg0.mileage"/>
+                <attribute key="names" path="$arg0.passengers.name"/>
+                """;
+    final String when = i % 2 == 0 ? "<when>$arg0.mileage gt %d</when>".formatted(i) : "";
+    return """
+        <configuration>
+          <static><attribute key="run" value="%d"/></static>
+          <dynamic>
+            <rule>
+              <selector><class name="%s"/><method name="park"/></selector>
+              %s%s
+            </rule>
+          </dynamic>
+        </configuration>
+        """
+        .formatted(i, GARAGE, when, attribute);
   }
 
   private static long loadedClasses() {

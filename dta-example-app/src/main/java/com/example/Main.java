@@ -59,7 +59,12 @@ public final class Main {
       } catch (InterruptedException interrupted) {
         Thread.currentThread().interrupt();
       }
-      CarsHandler.send(exchange, 202, "application/json", "{\"status\":\"parked in background\"}");
+      CarsHandler.send(
+          exchange,
+          202,
+          "application/json",
+"""
+{"status":"parked in background"}""");
     }
   }
 
@@ -91,7 +96,12 @@ public final class Main {
     private void parkCar(final HttpExchange exchange) throws IOException {
       final Car car = MAPPER.readValue(exchange.getRequestBody(), Car.class);
       garage.park(car);
-      send(exchange, 201, "application/json", "{\"status\":\"added\"}");
+      send(
+          exchange,
+          201,
+          "application/json",
+"""
+{"status":"added"}""");
     }
 
     private void emptyGarage(final HttpExchange exchange) throws IOException {
