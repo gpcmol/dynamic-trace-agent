@@ -5,7 +5,8 @@ name: CI
 # packaging-and-distribution, "Supported OTel agent versions"). Branch pushes then publish a snapshot
 # image: every run gets the next patch version (0.1.4-SNAPSHOT, 0.1.5-SNAPSHOT, ...) and the mutable
 # "snapshot" tag moves to it. The release after a merge takes the number of the newest snapshot
-# (release.yml). Pull requests only build the image.
+# (release.yml). Pull requests only build the image. Branch pushes also publish the garage demo
+# image, only as the mutable "snapshot" tag: it is never released.
 
 on:
   workflow_dispatch:
@@ -28,6 +29,7 @@ permissions:
 env:
   IMAGE: ghcr.io/gpcmol/dynamic-trace-agent
   PACKAGE: dynamic-trace-agent
+  APP_IMAGE: ghcr.io/gpcmol/dynamic-trace-app
 
 jobs:
   build:
@@ -100,3 +102,42 @@ jobs:
             ${{ steps.version.outputs.version && format('{0}:{1}', env.IMAGE, steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The garage demo (dta-example-app), for the Kubernetes example in deploy/kubernetes.
+  app-snapshot-image:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # The Dockerfile only copies the jar, so there is nothing to emulate for the other platform.
+      - name: Package the demo application
+        run: mvn -B -q -DskipTests -pl dta-example-app -am package
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build demo image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dta-example-app/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          tags: ${{ env.APP_IMAGE }}:snapshot

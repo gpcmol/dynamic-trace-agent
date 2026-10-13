@@ -80,6 +80,17 @@ spec:
 Mount the rule ConfigMap as a directory (no `subPath`) and set `DYNAMIC_TRACE_CONFIG_FILE`.
 Complete example: [`deploy/kubernetes/`](deploy/kubernetes).
 
+To run the garage demo in a cluster that has the Operator and an `Instrumentation`:
+
+```bash
+dta-example-app/scripts/build.sh     # package and build the demo image
+dta-example-app/scripts/deploy.sh    # push it, deploy it with config/agent-config.xml as ConfigMap
+dta-example-app/scripts/verify.sh    # send a request and check the attributes on its span
+```
+
+Run `deploy.sh` again after editing the rule file (or with `CONFIG_FILE=…`): the running pod
+reloads it, without a restart.
+
 | Variable | Meaning | Default |
 |---|---|---|
 | `DYNAMIC_TRACE_CONFIG_FILE` | rule file; not set → extension inactive | — |

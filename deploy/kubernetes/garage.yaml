@@ -1,6 +1,6 @@
 # The demo application. The ConfigMap is mounted as a DIRECTORY (no subPath): Kubernetes only
 # propagates ConfigMap updates to directory mounts, through an atomic symlink swap.
-# Image: build with dta-example-app/Dockerfile and push to your registry.
+# Build, deploy and check with dta-example-app/scripts/{build,deploy,verify}.sh.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: garage
-          image: localhost:5001/dynamic-trace-app:latest
+          image: ghcr.io/gpcmol/dynamic-trace-app:snapshot
           imagePullPolicy: Always
           ports:
             - name: http
