@@ -2,6 +2,7 @@ package org.otel.agent.core.binding;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.otel.agent.core.dsl.ConditionException;
 import org.otel.agent.core.dsl.ConditionTyper;
 import org.otel.agent.core.dsl.ExitSignature;
 import org.otel.agent.core.path.CompiledPath;
+import org.otel.agent.core.path.GenericTypes;
 import org.otel.agent.core.path.PathReader;
 import org.otel.agent.core.path.PathRoot;
 import org.otel.agent.core.path.PathSegment;
@@ -50,8 +52,7 @@ public final class RuleBinder {
       return MethodBinding.NONE;
     }
     final Map<String, Class<?>> hierarchy = ClassHierarchy.byName(receiver);
-    final ExitSignature signature =
-        new ExitSignature(receiver, List.of(method.getParameterTypes()), method.getReturnType());
+    final ExitSignature signature = signature(receiver, method);
     final List<BoundRule> rules = new ArrayList<>();
     final List<IgnoredRule> problems = new ArrayList<>();
     for (final SelectedRule candidate : candidates) {
@@ -103,6 +104,30 @@ public final class RuleBinder {
   }
 
   /**
+   * The static types of {@code method} on {@code receiver}, with generic types resolved against the
+   * receiver ({@code List<T>} declared in {@code Base<T>} is {@code List<Tree>} on {@code Forest
+   * extends Base<Tree>}).
+   */
+  private static ExitSignature signature(final Class<?> receiver, final Method method) {
+    final List<Class<?>> parameterTypes = List.of(method.getParameterTypes());
+    final Type[] generic = method.getGenericParameterTypes();
+    if (generic.length != parameterTypes.size()) {
+      return new ExitSignature(receiver, parameterTypes, method.getReturnType());
+    }
+    final List<Type> genericParameterTypes = new ArrayList<>(generic.length);
+    for (final Type parameter : generic) {
+      genericParameterTypes.add(
+          GenericTypes.resolve(parameter, method.getDeclaringClass(), receiver));
+    }
+    return new ExitSignature(
+        receiver,
+        parameterTypes,
+        method.getReturnType(),
+        genericParameterTypes,
+        GenericTypes.resolve(method.getGenericReturnType(), method.getDeclaringClass(), receiver));
+  }
+
+  /**
    * Reports a property that cannot exist: one missing on a <em>final</em> static type. For
    * non-final types a subclass may provide it, so the path is resolved at runtime (missing gives no
    * attribute). Collections, arrays, maps and {@code Object} end the static check.
@@ -111,6 +136,9 @@ public final class RuleBinder {
       final CompiledAttribute attribute, final ExitSignature signature) throws BindingException {
     final CompiledPath path = attribute.path();
     Class<?> type = rootType(path.root(), signature);
+    if (path.hasRootIndex() && type != null) {
+      type = componentTypeOrNull(type);
+    }
     for (final PathSegment segment : path.segments()) {
       if (type == null || !isExactType(type)) {
         return;

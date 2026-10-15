@@ -204,6 +204,88 @@ class PathReaderTest {
   }
 
   @Nested
+  class RootIndex {
+
+    private static final List<Car> CARS = List.of(CAR, new Car("audi", List.of(), null));
+
+    @Test
+    void listRoot() throws Exception {
+      assertEquals("audi", read("$return[1].brand", CARS));
+    }
+
+    @Test
+    void arrayRoot() throws Exception {
+      assertEquals("Kees", read("$arg0[0].name", CAR.getSeats()));
+    }
+
+    @Test
+    void iterableRootIsIndexedByIteration() throws Exception {
+      assertEquals("c", read("$this[2]", new LinkedHashSet<>(List.of("a", "b", "c"))));
+    }
+
+    @Test
+    void indexedRootAloneIsTheElement() throws Exception {
+      assertEquals(CAR, read("$return[0]", CARS));
+    }
+
+    @Test
+    void indexedRootFollowedByIndexAndFlattening() throws Exception {
+      assertEquals("Piet", read("$return[0].passengers[1].name", CARS));
+      assertEquals(List.of("Jan", "Piet"), read("$return[0].passengers.name", CARS));
+    }
+
+    @Test
+    void outOfRangeEmptyOrNullRootIsNull() throws Exception {
+      assertNull(read("$return[2].brand", CARS));
+      assertNull(read("$return[0].brand", List.of()));
+      assertNull(read("$return[0].brand", null));
+      assertNull(read("$return[0]", null));
+    }
+
+    @Test
+    void nonCollectionOrMapRootIsNull() throws Exception {
+      assertNull(read("$return[0].brand", CAR));
+      assertNull(read("$return[0]", CAR));
+      assertNull(read("$return[0]", Map.of(0, CAR)));
+    }
+
+    @Test
+    void endlessIterableRootIsBounded() throws Exception {
+      final Iterable<Passenger> endless =
+          () -> Stream.generate(() -> new Passenger("Jan")).iterator();
+
+      assertEquals("Jan", read("$arg0[10].name", endless));
+      assertNull(read("$arg0[5000].name", endless));
+    }
+
+    @Test
+    void readsTheRootFromTheFrame() throws Exception {
+      final ExitFrame frame =
+          new ExitFrame() {
+            @Override
+            public Object self() {
+              return null;
+            }
+
+            @Override
+            public Object returned() {
+              return CARS;
+            }
+
+            @Override
+            public Object argument(final int index) {
+              return null;
+            }
+          };
+
+      assertEquals(
+          "bmw",
+          PathReader.ownedBy(PathCompiler.attributePath("$return[0].brand"), PathReaderTest.class)
+              .read(frame));
+    }
+  }
+
+  @Nested
   class Flattening {
 
     @Test

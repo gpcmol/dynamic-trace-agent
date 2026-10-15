@@ -9,6 +9,7 @@ import org.otel.agent.core.dsl.Condition;
 import org.otel.agent.core.path.ExitFrame;
 import org.otel.agent.core.path.PathReader;
 import org.otel.agent.core.value.AttributeValues;
+import org.otel.agent.extension.diag.AgentLog;
 import org.otel.agent.extension.telemetry.AttributeKeySet;
 import org.otel.agent.extension.telemetry.SpanWriter;
 
@@ -27,14 +28,23 @@ final class MethodEnrichment {
     this.rules = rules;
   }
 
-  static MethodEnrichment of(final MethodBinding binding, final EngineState state) {
+  /**
+   * @param where {@code Class#method}, for debug messages
+   * @param log explains silent runtime cases when debugging is on (see {@link RuleDiagnostics})
+   */
+  static MethodEnrichment of(
+      final MethodBinding binding,
+      final EngineState state,
+      final String where,
+      final AgentLog log) {
     if (binding.isEmpty()) {
       return NONE;
     }
     final List<BoundRule> bound = binding.rules();
     final RuleRunner[] runners = new RuleRunner[bound.size()];
     for (int i = 0; i < runners.length; i++) {
-      runners[i] = RuleRunner.of(bound.get(i), state);
+      runners[i] =
+          RuleRunner.of(bound.get(i), state, RuleDiagnostics.forRule(bound.get(i), where, log));
     }
     return new MethodEnrichment(runners);
   }
@@ -53,7 +63,7 @@ final class MethodEnrichment {
     boolean fallback = false;
     try {
       for (final RuleRunner rule : rules) {
-        if (!Condition.evaluate(rule.condition, frame)) {
+        if (!rule.holds(frame)) {
           continue;
         }
         if (span == null) {
@@ -74,19 +84,24 @@ final class MethodEnrichment {
   }
 
   /** One bound rule with its attribute writers. */
-  private static final class RuleRunner {
-    private final Condition condition;
-    private final PathReader[] readers;
-    private final AttributeKeySet[] keys;
+  private static class RuleRunner {
+    final Condition condition;
+    final PathReader[] readers;
+    final AttributeKeySet[] keys;
 
-    private RuleRunner(
+    RuleRunner(
         final Condition condition, final PathReader[] readers, final AttributeKeySet[] keys) {
       this.condition = condition;
       this.readers = readers;
       this.keys = keys;
     }
 
-    static RuleRunner of(final BoundRule rule, final EngineState state) {
+    /**
+     * The runner for {@code rule}; with {@code diagnostics} an {@link ExplainedRuleRunner}. That
+     * subclass is only loaded in debug mode, so otherwise these methods stay monomorphic.
+     */
+    static RuleRunner of(
+        final BoundRule rule, final EngineState state, final RuleDiagnostics diagnostics) {
       final List<BoundAttribute> attributes = rule.attributes();
       final PathReader[] readers = new PathReader[attributes.size()];
       final AttributeKeySet[] keys = new AttributeKeySet[attributes.size()];
@@ -96,7 +111,13 @@ final class MethodEnrichment {
         final AttributeKeySet prepared = state.keys().get(key);
         keys[i] = prepared != null ? prepared : AttributeKeySet.of(key);
       }
-      return new RuleRunner(rule.condition(), readers, keys);
+      return diagnostics == null
+          ? new RuleRunner(rule.condition(), readers, keys)
+          : new ExplainedRuleRunner(rule.condition(), readers, keys, diagnostics);
+    }
+
+    boolean holds(final ExitFrame frame) {
+      return Condition.evaluate(condition, frame);
     }
 
     /** Each attribute is isolated: one failing getter never blocks the others. */
@@ -108,6 +129,51 @@ final class MethodEnrichment {
           // Enrichment must never affect the application; the attribute is skipped.
         }
       }
+    }
+  }
+
+  /** Debug mode: as {@link RuleRunner}, but says once why a condition or attribute failed. */
+  private static final class ExplainedRuleRunner extends RuleRunner {
+    private final RuleDiagnostics diagnostics;
+
+    ExplainedRuleRunner(
+        final Condition condition,
+        final PathReader[] readers,
+        final AttributeKeySet[] keys,
+        final RuleDiagnostics diagnostics) {
+      super(condition, readers, keys);
+      this.diagnostics = diagnostics;
+    }
+
+    @Override
+    boolean holds(final ExitFrame frame) {
+      return diagnostics.evaluate(condition, frame);
+    }
+
+    @Override
+    void writeAttributes(final Span span, final ExitFrame frame, final SpanWriter writer) {
+      for (int i = 0; i < readers.length; i++) {
+        try {
+          write(span, frame, writer, i);
+        } catch (RuntimeException | LinkageError failure) {
+          // As in RuleRunner: the attribute is skipped.
+        }
+      }
+    }
+
+    private void write(
+        final Span span, final ExitFrame frame, final SpanWriter writer, final int attribute) {
+      final Object value = readers[attribute].read(frame);
+      if (value == null) {
+        diagnostics.noValue(attribute);
+        return;
+      }
+      final Object converted = AttributeValues.convert(value);
+      if (converted == null) {
+        diagnostics.unwritable(attribute, value);
+        return;
+      }
+      writer.write(span, keys[attribute], converted);
     }
   }
 }

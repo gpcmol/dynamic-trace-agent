@@ -49,8 +49,11 @@ written — useful for a tail-sampling marker such as `debug=true`.
 ## 4. Paths
 
 ```
-$this | $return | $argN   ( .property ( [index] )? )+        N = 0..127
+( $this | $return | $argN ) ( [index] )?  ( .property ( [index] )? )*     N = 0..127
 ```
+
+An attribute path needs at least one property or a root index: `$return` alone is invalid,
+`$return[0]` is valid.
 
 | Example | Value |
 |---|---|
@@ -58,12 +61,17 @@ $this | $return | $argN   ( .property ( [index] )? )+        N = 0..127
 | `$arg0.passengers[1].name` | name of the second passenger (array, `List` or any `Iterable`) |
 | `$arg0.passengers.name` | list of all passenger names (property on a collection = for each element) |
 | `$return.status` | from the return value; `null` for void methods |
+| `$return[0].color` | color of the first element when the method returns an array, `List` or `Iterable` |
+| `$arg1[2]` | the third element of the second argument itself |
+| `$return.color` | when the method returns a collection: the colors of **all** elements |
 
-`null` anywhere on the way, a `Map`, a missing property or a throwing getter → no attribute.
+`null` anywhere on the way, a `Map`, a missing property, a throwing getter, an index out of range or
+an index on a value that is no array or `Iterable` → no attribute.
 
-Limits: a path has at most 32 segments; of an array or collection only the first 1 000 elements
-are read (and written). The property `class` and properties of protected JDK types cannot be read,
-see §6.
+Limits: a path has at most 32 segments (a root index does not count); an index is 0..999 999 999;
+of an array or collection only the first 1 000 elements are read (and written), and an `Iterable`
+that is not a `Collection` is walked at most 1 000 elements for an index. The property `class` and
+properties of protected JDK types cannot be read, see §6.
 
 Value types written: string, long (all integer types), double, boolean, homogeneous arrays of
 those; `char` → string, enum → `name()`. Other objects are not written (no `toString()`).
@@ -76,7 +84,7 @@ those; `char` → string, enum → `name()`. Other objects are not written (no `
 | unknown element / XML attribute, namespace | document rejected | `<configuration>/<dynamic>/<rule>#1/<selector>#1: unknown element <klass>` |
 | duplicate section, blank required value | document rejected | `<configuration>: <static> may occur only once` |
 | duplicate attribute key (static and dynamic share one key space), key > 255, control character in a key | document rejected | `rule #2: attribute key 'brand' is used more than once in the document` |
-| invalid path syntax, `class` in a path, more than 32 segments | document rejected | `rule #1, attribute 'brand': invalid path '$arg0..brand': empty segment` |
+| invalid path syntax (also `$return[01]`, `$return[0][1]`), `class` in a path, more than 32 segments | document rejected | `rule #1, attribute 'brand': invalid path '$arg0..brand': empty segment` |
 | file larger than 1 MiB, not a regular file, not UTF-8 | file not loaded | `configuration file … cannot be read (… larger than 1048576 bytes); keeping the current configuration and retrying` |
 | protected namespace | rule ignored | `rule #1 (java.util.ArrayList#add) is ignored: … protected namespace 'java.*'` |
 | condition does not parse, is longer than 4 096 characters or nested deeper than 64 levels | rule ignored | `rule #2 (a.B#m) is ignored: condition: syntax error: '&&' is not supported, use 'and' at position 8` |
@@ -84,7 +92,28 @@ those; `char` → string, enum → `name()`. Other objects are not written (no `
 | method / property does not exist, condition type error | rule ignored for that class | `rule #1 (…) is ignored for com.example.Garage: attribute 'x': 'missing' is not a property of com.example.Result` |
 | selector class not loaded (typo?) | warning only; rule applies if it loads | `selected class com.example.Garag is not found or not loaded yet …` |
 
-A rejected document never replaces the active configuration.
+A rejected document never replaces the active configuration. Each problem is warned once (per
+file change, or per rule and reason until the next configuration); a deleted file disables
+enrichment (INFO).
+
+### Problems while the application runs
+
+Nothing ever reaches the application: the advice suppresses every `Throwable`, and failures are
+not retried on every call (bindings, including "this class cannot be bound", are cached per class).
+
+| Case | Effect | Logged |
+|---|---|---|
+| attribute: `null` on the way, missing property (non-final type), index out of range, `Map`, failing getter | that attribute is not written; the others are | debug only, once per rule and attribute |
+| attribute value of a type that cannot be written (e.g. an application object) | not written | debug only, once per rule and attribute (type name, never the value) |
+| condition throws, or a dynamic value has another type than its counterpart | the condition is `false` for this call | debug only, once per rule (a type mismatch is not a failure: no message) |
+| a class cannot be bound (e.g. a type missing at runtime) | that class is not enriched | WARNING, once |
+| a getter calls another instrumented method | the nested call is not enriched | none |
+| any other failure inside the enrichment | skipped for this call | debug only |
+
+Debug mode is `OTEL_JAVAAGENT_DEBUG=true` (or `-Dotel.javaagent.debug=true`); with it off, these
+cases cost nothing extra. Costs the agent cannot remove: a getter that always throws creates an
+exception on every call, and a getter with side effects (lazy loading, remote calls) runs on every
+call — select a cheaper property.
 
 ## 6. Security
 

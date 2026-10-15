@@ -3,7 +3,6 @@
 | Idea | Notes |
 |---|---|
 | `Map` traversal in paths and conditions | e.g. `$arg0.attributes['key']` |
-| Generic element-type inference (`List<Passenger>`) in conditions | lifts the "erased collection type" limitation |
 | Mixed `Long`/`Double` comparisons and complete arithmetic type propagation | |
 | Overload selection (signature in a selector) | e.g. `<method name="park" parameters="com.example.Car"/>` |
 | Package / annotation / interface-wide / wildcard selectors | |

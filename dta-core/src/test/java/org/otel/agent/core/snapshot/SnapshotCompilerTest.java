@@ -118,6 +118,24 @@ class SnapshotCompilerTest {
   }
 
   @Test
+  void indexedArgumentRootCountsForTheArgumentMode() throws Exception {
+    final Snapshot snapshot =
+        compile(
+            rules(
+                """
+                <rule>
+                  %s
+                  <when>$arg6[0] != null</when>
+                  <attribute key="a" path="$arg4[1].name"/>
+                </rule>
+                """
+                    .formatted(GARAGE)));
+
+    assertEquals(6, snapshot.rules().get(0).maxArgumentIndex());
+    assertTrue(snapshot.plan().entries().iterator().next().allArguments());
+  }
+
+  @Test
   void protectedRulesStayIgnored() throws Exception {
     final Snapshot snapshot =
         compile(

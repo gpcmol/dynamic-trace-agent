@@ -7,6 +7,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -58,6 +59,28 @@ public final class PropertyAccessors {
     }
     final Field field = publicInstanceField(type, property);
     return field == null ? Optional.empty() : Optional.of(field.getType());
+  }
+
+  /**
+   * The generic type a property read returns on a value of type {@code owner}, with the type
+   * variables of the declaring class resolved against {@code owner} (see {@link GenericTypes});
+   * empty if the property does not exist. Same discovery as {@link #propertyType}.
+   */
+  public static Optional<Type> propertyGenericType(final Type owner, final String property) {
+    final Class<?> type = GenericTypes.erase(owner);
+    if (!isReadable(type, property)) {
+      return Optional.empty();
+    }
+    final Method getter = getter(type, property);
+    if (getter != null) {
+      return Optional.of(
+          GenericTypes.resolve(getter.getGenericReturnType(), getter.getDeclaringClass(), owner));
+    }
+    final Field field = publicInstanceField(type, property);
+    return field == null
+        ? Optional.empty()
+        : Optional.of(
+            GenericTypes.resolve(field.getGenericType(), field.getDeclaringClass(), owner));
   }
 
   /**

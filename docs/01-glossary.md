@@ -8,7 +8,7 @@
 | **Condition** | The `<when>` expression; decides per call whether the rule enriches. | `Expression` (parsed), `Condition` (typed) |
 | **Static attribute** | `<static><attribute key value/>`: written on every enrichment event. | `ConfigDocument.StaticAttribute` |
 | **Dynamic attribute** | `<attribute key path/>` in a rule: value read at the exit. | `CompiledAttribute`, `BoundAttribute` |
-| **Path** | `$this`, `$return` or `$argN` followed by properties, e.g. `$arg0.passengers[1].name`. | `CompiledPath`, `PathReader` |
+| **Path** | `$this`, `$return` or `$argN`, optionally indexed, followed by properties, e.g. `$arg0.passengers[1].name` or `$return[0].color`. | `CompiledPath`, `PathReader` |
 | **Enrichment event** | One exit for which at least one rule's condition holds: static attributes once, plus each matching rule's dynamic attributes. | `MethodEnrichment.enrich` |
 | **Fallback span** | The `INTERNAL` span `dynamic-trace.enrichment` created when there is no current span. | `SpanWriter` |
 | **Plan** | Which `(class, method)` pairs carry advice, by name, plus their argument mode. | `TransformationPlan` |

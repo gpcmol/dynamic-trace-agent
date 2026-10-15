@@ -35,7 +35,48 @@ class PathCompilerTest {
 
     final InvalidPathException exception =
         assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath("$arg0"));
-    assertTrue(exception.getMessage().contains("property is required"));
+    assertTrue(exception.getMessage().contains("property or index is required"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"$return[0].color", "$arg1[2].name", "$this[0].id", "$return[0]"})
+  void compilesAnIndexedRoot(final String text) throws Exception {
+    final CompiledPath path = PathCompiler.attributePath(text);
+
+    assertTrue(path.hasRootIndex());
+    assertEquals(text, path.toString());
+  }
+
+  @Test
+  void rootIndexIsNotASegment() throws Exception {
+    final CompiledPath path = PathCompiler.attributePath("$return[3].trees[1].color");
+
+    assertEquals(PathRoot.RETURN, path.root());
+    assertEquals(3, path.rootIndex());
+    assertEquals(
+        List.of(PathSegment.indexed("trees", 1), PathSegment.property("color")), path.segments());
+    assertEquals(
+        PathCompiler.MAX_SEGMENTS,
+        PathCompiler.attributePath("$this[0]" + ".a".repeat(PathCompiler.MAX_SEGMENTS))
+            .segments()
+            .size());
+  }
+
+  @Test
+  void pathWithoutRootIndexHasNone() throws Exception {
+    assertEquals(PathSegment.NO_INDEX, PathCompiler.attributePath("$return.color").rootIndex());
+  }
+
+  @Test
+  void rootAndSegmentIndexShareTheirErrorMessages() {
+    final InvalidPathException root =
+        assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath("$return[01]"));
+    final InvalidPathException segment =
+        assertThrows(
+            InvalidPathException.class, () -> PathCompiler.attributePath("$return.trees[01]"));
+
+    assertTrue(root.getMessage().contains("must be a number 0..999999999"));
+    assertTrue(segment.getMessage().contains("must be a number 0..999999999"));
   }
 
   @ParameterizedTest
@@ -64,7 +105,20 @@ class PathCompilerTest {
         "$this.bra nd",
         "$this.class",
         "$this.class.classLoader",
-        "$arg0.owner.class.name"
+        "$arg0.owner.class.name",
+        "$return[]",
+        "$return[01]",
+        "$return[-1]",
+        "$return[0][1]",
+        "$return[0]x",
+        "$return[0].",
+        "$return [0]",
+        "$return[a]",
+        "$return[0",
+        "$arg0[1000000000]",
+        "$arg[0]",
+        "[0].color",
+        "$return[0].class"
       })
   void rejectsInvalidPaths(final String text) {
     assertThrows(InvalidPathException.class, () -> PathCompiler.attributePath(text));

@@ -115,3 +115,91 @@ dta-benchmarks/scripts/bench.sh                             # k6 macro benchmark
 | `dta-example-app` | garage demo application + OTLP stub |
 | `dta-integration-tests` | end-to-end tests with the real OpenTelemetry agent |
 | `dta-benchmarks` | JMH and k6 benchmarks |
+
+## Use cases
+
+Each snippet is one `<rule>` inside `<dynamic>`; the `<static>` attributes of the file are written
+too whenever a rule matches. Syntax: [docs/06-config-xml.md](docs/06-config-xml.md) (paths) and
+[docs/07-dsl.md](docs/07-dsl.md) (`<when>`).
+
+**Always enrich**: `<when>` is optional. Without it the rule matches every call: each time the
+method returns, its attributes (and the static ones) are written on the current span — or, if there
+is none, on a fallback `INTERNAL` span `dynamic-trace.enrichment`.
+
+```xml
+<rule>
+    <selector><class name="com.example.shop.OrderService"/><method name="placeOrder"/></selector>
+    <attribute key="order.id"     path="$arg0.id"/>
+    <attribute key="order.status" path="$return.status"/>
+</rule>
+```
+
+**Keep every trace of one customer during an incident** — no attributes needed: the static
+`debug=true` is the tail-sampling marker.
+
+```xml
+<rule>
+    <selector><class name="com.example.shop.OrderService"/><method name="placeOrder"/></selector>
+    <when>$arg0.customer != null and $arg0.customer.id == 'C-1042'</when>
+</rule>
+```
+
+**Explain failures**: record why an order was rejected, only when it was.
+
+```xml
+<rule>
+    <selector><class name="com.example.shop.OrderService"/><method name="placeOrder"/></selector>
+    <when>not $return.accepted</when>
+    <attribute key="order.status" path="$return.status"/>
+    <attribute key="order.reason" path="$return.rejection.code"/>
+</rule>
+```
+
+**Large or unusual input**: numbers, arithmetic, sizes and set membership.
+
+```xml
+<rule>
+    <selector><class name="com.example.shop.OrderService"/><method name="placeOrder"/></selector>
+    <when>($arg0.total gt 10000 or size($arg0.lines) gte 50) and $arg0.country in ['NL', 'BE']</when>
+    <attribute key="order.total"   path="$arg0.total"/>
+    <attribute key="order.country" path="$arg0.country"/>
+</rule>
+```
+
+**Text matching**: SQL-`LIKE` patterns, case-insensitive variants, tags in a collection.
+
+```xml
+<rule>
+    <selector><class name="com.example.auth.LoginService"/><method name="login"/></selector>
+    <when>ilike($arg0.email, '%@example.com') or contains($arg0.roles, 'admin')</when>
+    <attribute key="user.email" path="$arg0.email"/>
+    <attribute key="user.roles" path="$arg0.roles"/>
+</rule>
+```
+
+**Collections**: one element by index, or one property of every element (written as an array).
+Conditions know the element type from the generic signature (`List<Tree>` → `Tree`).
+
+```xml
+<rule>
+    <selector><class name="com.example.forest.Forest"/><method name="getTree"/></selector>
+    <when>size($return) gt 0 and $return[0].color == 'green'</when>
+    <attribute key="tree.first.color" path="$return[0].color"/>   <!-- List<Tree> getTree() -->
+    <attribute key="tree.colors"      path="$return.color"/>      <!-- colors of all trees -->
+    <attribute key="tree.second.id"   path="$return[1].id"/>      <!-- absent with < 2 trees -->
+</rule>
+```
+
+**Interfaces and several methods**: a selector on an interface covers every implementation; one
+rule can have several selectors.
+
+```xml
+<rule>
+    <selector><class name="com.example.pay.PaymentProvider"/><method name="authorize"/></selector>
+    <selector><class name="com.example.pay.PaymentProvider"/><method name="capture"/></selector>
+    <when>$arg0.amount gt 0 and $this.name != 'sandbox'</when>
+    <attribute key="pay.provider" path="$this.name"/>
+    <attribute key="pay.amount"   path="$arg0.amount"/>
+    <attribute key="pay.currency" path="$arg0.currency"/>
+</rule>
+```
