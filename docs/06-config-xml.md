@@ -92,7 +92,28 @@ those; `char` → string, enum → `name()`. Other objects are not written (no `
 | method / property does not exist, condition type error | rule ignored for that class | `rule #1 (…) is ignored for com.example.Garage: attribute 'x': 'missing' is not a property of com.example.Result` |
 | selector class not loaded (typo?) | warning only; rule applies if it loads | `selected class com.example.Garag is not found or not loaded yet …` |
 
-A rejected document never replaces the active configuration.
+A rejected document never replaces the active configuration. Each problem is warned once (per
+file change, or per rule and reason until the next configuration); a deleted file disables
+enrichment (INFO).
+
+### Problems while the application runs
+
+Nothing ever reaches the application: the advice suppresses every `Throwable`, and failures are
+not retried on every call (bindings, including "this class cannot be bound", are cached per class).
+
+| Case | Effect | Logged |
+|---|---|---|
+| attribute: `null` on the way, missing property (non-final type), index out of range, `Map`, failing getter | that attribute is not written; the others are | debug only, once per rule and attribute |
+| attribute value of a type that cannot be written (e.g. an application object) | not written | debug only, once per rule and attribute (type name, never the value) |
+| condition throws, or a dynamic value has another type than its counterpart | the condition is `false` for this call | debug only, once per rule (a type mismatch is not a failure: no message) |
+| a class cannot be bound (e.g. a type missing at runtime) | that class is not enriched | WARNING, once |
+| a getter calls another instrumented method | the nested call is not enriched | none |
+| any other failure inside the enrichment | skipped for this call | debug only |
+
+Debug mode is `OTEL_JAVAAGENT_DEBUG=true` (or `-Dotel.javaagent.debug=true`); with it off, these
+cases cost nothing extra. Costs the agent cannot remove: a getter that always throws creates an
+exception on every call, and a getter with side effects (lazy loading, remote calls) runs on every
+call — select a cheaper property.
 
 ## 6. Security
 

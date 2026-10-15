@@ -120,7 +120,7 @@ final class ClassBindings {
                 + " (configuration "
                 + state.version()
                 + ")");
-    return MethodEnrichment.of(binding, state);
+    return MethodEnrichment.of(binding, state, type.getName() + "#" + method.getName(), log);
   }
 
   /** Bindings of one class for one published configuration; copy-on-write. */

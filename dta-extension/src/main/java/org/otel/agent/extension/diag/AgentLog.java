@@ -68,6 +68,10 @@ public final class AgentLog {
     LOGGER.log(Level.INFO, PREFIX + printable(message));
   }
 
+  public boolean isDebugEnabled() {
+    return debugEnabled;
+  }
+
   /** Logs at INFO with a debug marker, only in debug mode. The message is built lazily. */
   public void debug(final Supplier<String> message) {
     if (debugEnabled) {
