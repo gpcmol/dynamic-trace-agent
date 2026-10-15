@@ -34,6 +34,45 @@ interface ValueNode {
     }
   }
 
+  /**
+   * A dynamic operand (static type {@code Object}) used as {@code type}: the value passes only if
+   * it is of that type ({@code Long}: byte, short, int, long; {@code Double}: float, double),
+   * anything else becomes {@code null}. Only built for dynamic operands, so typed paths never pay
+   * for it.
+   */
+  record Coerced(ValueNode operand, Class<?> type) implements ValueNode {
+
+    static boolean supports(final Class<?> type) {
+      return type == String.class
+          || type == Long.class
+          || type == Double.class
+          || type == Boolean.class;
+    }
+
+    public Coerced {
+      if (!supports(type)) {
+        throw new IllegalArgumentException("cannot coerce to " + type);
+      }
+    }
+
+    @Override
+    public Object value(final ExitFrame frame) {
+      final Object value = operand.value(frame);
+      if (type == Long.class) {
+        return value instanceof Long
+                || value instanceof Integer
+                || value instanceof Short
+                || value instanceof Byte
+            ? value
+            : null;
+      }
+      if (type == Double.class) {
+        return value instanceof Double || value instanceof Float ? value : null;
+      }
+      return type.isInstance(value) ? value : null;
+    }
+  }
+
   /** {@code size(x)}: collection size or array length, 0 for {@code null}. */
   record SizeNode(ValueNode operand) implements ValueNode {
     @Override

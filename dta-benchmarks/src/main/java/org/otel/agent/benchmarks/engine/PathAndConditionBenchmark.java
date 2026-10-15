@@ -61,6 +61,8 @@ public class PathAndConditionBenchmark {
   private PathReader secondPassenger;
   private PathReader indexedRoot;
   private Condition referenceCondition;
+  private Condition genericElementCondition;
+  private Condition dynamicCondition;
 
   @Setup
   public void setUp() throws Exception {
@@ -74,6 +76,18 @@ public class PathAndConditionBenchmark {
                 "$arg0.brand in ['bmw', 'audi', 'vw', 'mercedes', 'toyota', 'honda', 'ford',"
                     + " 'renault'] and $arg0.mileage gt 0"),
             new ExitSignature(Garage.class, List.of(Car.class), Result.class),
+            Garage.class);
+    // List<Passenger> getPassengers(): typed through the generic signature, no runtime coercion.
+    genericElementCondition =
+        ConditionTyper.type(
+            ExpressionParser.parse("$arg0.passengers[1].name == 'Piet'"),
+            new ExitSignature(Garage.class, List.of(Car.class, List.class), Result.class),
+            Garage.class);
+    // A raw List argument: the element is dynamic and coerced to String when evaluated.
+    dynamicCondition =
+        ConditionTyper.type(
+            ExpressionParser.parse("$arg1[1].name == 'Piet'"),
+            new ExitSignature(Garage.class, List.of(Car.class, List.class), Result.class),
             Garage.class);
   }
 
@@ -95,5 +109,15 @@ public class PathAndConditionBenchmark {
   @Benchmark
   public boolean evaluateReferenceCondition() {
     return Condition.evaluate(referenceCondition, frame);
+  }
+
+  @Benchmark
+  public boolean evaluateGenericElementCondition() {
+    return Condition.evaluate(genericElementCondition, frame);
+  }
+
+  @Benchmark
+  public boolean evaluateDynamicCondition() {
+    return Condition.evaluate(dynamicCondition, frame);
   }
 }

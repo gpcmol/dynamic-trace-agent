@@ -196,6 +196,8 @@ class ConditionTest {
           "like($arg0.model, 'x%') | false",
           "ilike($arg0.model, '%5') | true",
           "$arg0.seats[0].name == 'Kees' | true",
+          "$arg0.passengers[1].name == 'Piet' | true",
+          "contains($arg0.tags, 'vip') and $arg0.tags[0] == 'vip' | true",
           "$arg0.mileage + 1 == 50001 | true",
           "$arg0.mileage - 2 * 25000 == 0 | true",
           "($arg0.mileage + 50000) / 2 == 50000 | true",
@@ -270,7 +272,6 @@ class ConditionTest {
           "$arg0.brand[0] == 'b' | TYPE_MISMATCH",
           "$arg0.colour == 'red' | UNKNOWN_PROPERTY",
           "$return.missing == 'x' | UNKNOWN_PROPERTY",
-          "$arg0.passengers[1].name == 'Jan' | ERASED_COLLECTION_TYPE",
           "$arg0.passengers.name == 'Jan' | ERASED_COLLECTION_TYPE",
           "$arg0.labels.a == 'b' | MAP_UNSUPPORTED",
           "size($arg0.labels) == 0 | MAP_UNSUPPORTED"
@@ -348,7 +349,6 @@ class ConditionTest {
     @CsvSource(
         delimiter = '|',
         value = {
-          "$arg1[0] == null | ERASED_COLLECTION_TYPE",
           "$return[0].missing == 'x' | UNKNOWN_PROPERTY",
           "$return[0].name == 42 | TYPE_MISMATCH"
         })
@@ -372,11 +372,16 @@ class ConditionTest {
     }
 
     @Test
-    void erasedRootMessageNamesTheIndexedRoot() {
+    void indexOnANonCollectionNamesTheIndexedRoot() {
       final ConditionException exception =
-          assertThrows(ConditionException.class, () -> compileBoard("$arg1[0] == null"));
+          assertThrows(ConditionException.class, () -> compile("$arg0[0].brand == 'bmw'"));
 
-      assertTrue(exception.getMessage().contains("'$arg1[0]'"), exception.getMessage());
+      assertTrue(exception.getMessage().contains("'$arg0[0]'"), exception.getMessage());
+    }
+
+    @Test
+    void rawListRootIsDynamic() throws Exception {
+      assertTrue(Condition.evaluate(compileBoard("$arg1[0].name == 'Eva'"), BOARDED));
     }
 
     @Test
@@ -416,6 +421,151 @@ class ConditionTest {
     void ilikeFoldsAsciiOnly() {
       assertTrue(LikePattern.compile("x%", true).matches("X5"));
       assertFalse(LikePattern.compile("ß", true).matches("SS"));
+    }
+  }
+
+  @Nested
+  class GenericAndDynamic {
+
+    /** Return types the typer has to read from generic signatures. */
+    @SuppressWarnings({"unused", "rawtypes"})
+    public static final class Shop {
+      public List<Passenger> listed() {
+        return List.of();
+      }
+
+      public List<?> unknown() {
+        return List.of();
+      }
+
+      public List raw() {
+        return List.of();
+      }
+
+      public <T> List<T> generic() {
+        return List.of();
+      }
+    }
+
+    private static Condition compileFor(final String method, final String text) throws Exception {
+      final java.lang.reflect.Method returning = Shop.class.getMethod(method);
+      return ConditionTyper.type(
+          ExpressionParser.parse(text),
+          new ExitSignature(
+              Shop.class, List.of(), List.class, List.of(), returning.getGenericReturnType()),
+          ConditionTest.class);
+    }
+
+    private static boolean evalFor(final String method, final String text, final Object returned)
+        throws Exception {
+      return Condition.evaluate(compileFor(method, text), new Frame(new Shop(), returned));
+    }
+
+    @Test
+    void genericElementIsTyped() throws Exception {
+      assertTrue(evalFor("listed", "$return[0].name == 'Jan'", List.of(new Passenger("Jan"))));
+    }
+
+    @Test
+    void typoAfterAGenericElementIsReported() {
+      final ConditionException exception =
+          assertThrows(
+              ConditionException.class, () -> compileFor("listed", "$return[0].nmae == 'x'"));
+
+      assertEquals(Category.UNKNOWN_PROPERTY, exception.category());
+    }
+
+    @Test
+    void typeErrorAfterAGenericElementIsReported() {
+      final ConditionException exception =
+          assertThrows(
+              ConditionException.class, () -> compileFor("listed", "$return[0].name gt 1"));
+
+      assertEquals(Category.TYPE_MISMATCH, exception.category());
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = '|',
+        value = {"unknown", "raw", "generic"})
+    void unknownElementTypeIsDynamic(final String method) throws Exception {
+      assertTrue(evalFor(method, "$return[0].name == 'Jan'", List.of(new Passenger("Jan"))));
+      assertFalse(evalFor(method, "$return[0].name == 'Jan'", List.of("no name property")));
+      assertFalse(evalFor(method, "$return[0].name != 'Jan'", List.of("no name property")));
+    }
+
+    @Test
+    void dynamicValueMustHaveTheTypeOfItsCounterpart() throws Exception {
+      assertTrue(evalFor("unknown", "$return[0] == 'text'", List.of("text")));
+      assertTrue(evalFor("unknown", "$return[0] gt 10", List.of(11)));
+      assertTrue(evalFor("unknown", "$return[0] gt 10", List.of((byte) 11)));
+      assertFalse(evalFor("unknown", "$return[0] gt 10", List.of(11.5d)));
+      assertFalse(evalFor("unknown", "$return[0] gt 10", List.of("11")));
+      assertTrue(evalFor("unknown", "$return[0] gt 10.5", List.of(11.5f)));
+      assertFalse(evalFor("unknown", "$return[0] gt 10.5", List.of(11)));
+      assertTrue(evalFor("unknown", "10 lt $return[0]", List.of(11L)));
+    }
+
+    @Test
+    void dynamicValueAsConditionMustBeBoolean() throws Exception {
+      assertTrue(evalFor("raw", "$return[0]", List.of(true)));
+      assertFalse(evalFor("raw", "$return[0]", List.of("true")));
+      assertTrue(evalFor("raw", "not $return[0]", List.of(false)));
+    }
+
+    @Test
+    void dynamicValueInFunctionsAndMembership() throws Exception {
+      assertTrue(evalFor("unknown", "$return[0] in ['bmw', 'audi']", List.of("bmw")));
+      assertFalse(evalFor("unknown", "$return[0] in ['bmw', 'audi']", List.of(1L)));
+      assertTrue(evalFor("unknown", "$return[0] in [1, 2]", List.of(2)));
+      assertTrue(evalFor("unknown", "like($return[0], 'b%')", List.of("bmw")));
+      assertTrue(evalFor("unknown", "ilike($return[0], 'B%')", List.of("bmw")));
+      assertTrue(evalFor("unknown", "contains($return[0], 'm')", List.of("bmw")));
+      assertTrue(evalFor("unknown", "like('bmw', $return[0])", List.of("b%")));
+    }
+
+    @Test
+    void dynamicValueInArithmetic() throws Exception {
+      assertTrue(evalFor("unknown", "$return[0] + 1 == 6", List.of(5)));
+      assertFalse(evalFor("unknown", "$return[0] + 1 == 6", List.of(5.0d)));
+    }
+
+    @Test
+    void twoDynamicValuesCompareByEquality() throws Exception {
+      assertTrue(evalFor("unknown", "$return[0] == $return[1]", List.of("a", "a")));
+      assertFalse(evalFor("unknown", "$return[0] == $return[1]", List.of("a", 1)));
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = '|',
+        value = {
+          "$return[0] + $return[1] == 2 | TYPE_MISMATCH",
+          "$return[0] gt $return[1] | TYPE_MISMATCH",
+          "$return.name == 'Jan' | ERASED_COLLECTION_TYPE"
+        })
+    void rejectsWhatHasNoTypeToTake(final String text, final Category category) {
+      final ConditionException exception =
+          assertThrows(ConditionException.class, () -> compileFor("unknown", text));
+
+      assertEquals(category, exception.category(), exception.getMessage());
+    }
+
+    @Test
+    void objectGetterIsDynamicToo() throws Exception {
+      assertTrue(eval("$arg0.anything == 'dynamic'"));
+      assertFalse(eval("$arg0.anything gt 1"));
+    }
+
+    @Test
+    void staticOperandsAreNotCoerced() throws Exception {
+      final ComparisonConditions.Equality typed =
+          (ComparisonConditions.Equality) compile("$arg0.brand == 'bmw'");
+      final ComparisonConditions.Equality dynamic =
+          (ComparisonConditions.Equality) compile("$arg0.anything == 'bmw'");
+
+      assertTrue(typed.left() instanceof ValueNode.PathNode);
+      assertTrue(dynamic.left() instanceof ValueNode.Coerced);
     }
   }
 }

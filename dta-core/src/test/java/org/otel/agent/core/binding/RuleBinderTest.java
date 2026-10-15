@@ -6,9 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.binding.BindingFixtures;
+import com.example.binding.BindingFixtures.Base;
 import com.example.binding.BindingFixtures.Car;
 import com.example.binding.BindingFixtures.Garage;
+import com.example.binding.BindingFixtures.InheritedShelf;
 import com.example.binding.BindingFixtures.Result;
+import com.example.binding.BindingFixtures.ResultShelf;
 import com.example.binding.BindingFixtures.SportsCar;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -254,17 +257,41 @@ class RuleBinderTest {
   }
 
   @Test
-  void listRootInAConditionIsAnErasedCollection() throws Exception {
+  void listRootInAConditionUsesTheGenericElementType() throws Exception {
     final MethodBinding binding =
         RuleBinder.bind(
-            snapshot(rule("Garage", "recent", "<when>$return[0].accepted</when>")),
+            snapshot(rule("Garage", "recent", "<when>not $return[0].accepted</when>")),
+            Garage.class,
+            method(Garage.class, "recent"));
+    final MethodBinding typo =
+        RuleBinder.bind(
+            snapshot(rule("Garage", "recent", "<when>$return[0].acceptd</when>")),
             Garage.class,
             method(Garage.class, "recent"));
 
-    assertTrue(binding.isEmpty());
+    final Frame frame = new Frame(new Garage(), new Garage().recent(), null);
+    assertTrue(Condition.evaluate(binding.rules().get(0).condition(), frame));
     assertTrue(
-        binding.problems().get(0).reason().startsWith("condition: erased collection type"),
-        binding.problems().get(0).reason());
+        typo.problems().get(0).reason().startsWith("condition: unknown property"),
+        typo.problems().get(0).reason());
+  }
+
+  @Test
+  void typeVariableIsResolvedOnTheReceiver() throws Exception {
+    final MethodBinding inherited =
+        RuleBinder.bind(
+            snapshot(rule("Base", "items", "<when>$return[0].accepted</when>")),
+            InheritedShelf.class,
+            Base.class.getMethod("items"));
+    final MethodBinding overridden =
+        RuleBinder.bind(
+            snapshot(rule("Shelf", "items", "<when>$return[0].missing</when>")),
+            ResultShelf.class,
+            method(ResultShelf.class, "items"));
+
+    assertTrue(inherited.problems().isEmpty(), inherited.problems().toString());
+    assertEquals(1, inherited.rules().size());
+    assertTrue(overridden.problems().get(0).reason().contains("'missing'"));
   }
 
   @Test

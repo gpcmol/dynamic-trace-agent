@@ -166,10 +166,12 @@ too whenever a rule matches. Syntax: [docs/06-config-xml.md](docs/06-config-xml.
 ```
 
 **Collections**: one element by index, or one property of every element (written as an array).
+Conditions know the element type from the generic signature (`List<Tree>` → `Tree`).
 
 ```xml
 <rule>
     <selector><class name="com.example.forest.Forest"/><method name="getTree"/></selector>
+    <when>size($return) gt 0 and $return[0].color == 'green'</when>
     <attribute key="tree.first.color" path="$return[0].color"/>   <!-- List<Tree> getTree() -->
     <attribute key="tree.colors"      path="$return.color"/>      <!-- colors of all trees -->
     <attribute key="tree.second.id"   path="$return[1].id"/>      <!-- absent with < 2 trees -->

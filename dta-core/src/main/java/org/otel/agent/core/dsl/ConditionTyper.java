@@ -1,5 +1,6 @@
 package org.otel.agent.core.dsl;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -10,6 +11,7 @@ import org.otel.agent.core.dsl.ConditionException.Category;
 import org.otel.agent.core.dsl.Expression.ComparisonOperator;
 import org.otel.agent.core.dsl.Expression.TextFunctionName;
 import org.otel.agent.core.path.CompiledPath;
+import org.otel.agent.core.path.GenericTypes;
 import org.otel.agent.core.path.PathReader;
 import org.otel.agent.core.path.PathRoot;
 import org.otel.agent.core.path.PathSegment;
@@ -31,8 +33,12 @@ import org.otel.agent.core.path.PropertyAccessors;
  *       String needle. {@code size}: Collection or array. Arithmetic: two numbers.
  *   <li>A bare operand must be boolean.
  *   <li>Paths: properties must exist on the static type; a {@code Map} on the way is {@code map
- *       unsupported}; an element of a {@code Collection} has no static type ({@code erased
- *       collection type}). A value of static type {@code Object} is not checked further.
+ *       unsupported}; a property applied to a whole collection is {@code erased collection type}.
+ *       Types are generic: {@code [i]} on a {@code List<Tree>} is a {@code Tree}, type variables
+ *       are resolved through the receiver's class hierarchy (see {@link GenericTypes}).
+ *   <li>A value of static type {@code Object} (an element of {@code List<?>}, an {@code Object}
+ *       getter) is dynamic: it is not checked further and takes the type of its counterpart,
+ *       checked when evaluated ({@link ValueNode.Coerced}).
  * </ul>
  */
 public final class ConditionTyper {
@@ -90,7 +96,7 @@ public final class ConditionTyper {
   }
 
   private Condition truthy(final Expression.Truthy truthy) throws ConditionException {
-    final ValueNode operand = value(truthy.operand());
+    final ValueNode operand = coerce(value(truthy.operand()), Boolean.class);
     if (operand.type() != Boolean.class) {
       throw mismatch("a condition must be boolean, got " + Types.describe(operand.type()));
     }
@@ -99,8 +105,9 @@ public final class ConditionTyper {
 
   private Condition comparison(final Expression.Comparison comparison) throws ConditionException {
     final ComparisonOperator operator = comparison.operator();
-    final ValueNode left = value(comparison.left());
-    final ValueNode right = value(comparison.right());
+    final ValueNode typedLeft = value(comparison.left());
+    final ValueNode right = coerce(value(comparison.right()), typedLeft.type());
+    final ValueNode left = coerce(typedLeft, right.type());
     final boolean leftNull = left.type() == Types.NULL;
     final boolean rightNull = right.type() == Types.NULL;
 
@@ -125,7 +132,7 @@ public final class ConditionTyper {
   }
 
   private Condition membership(final Expression.Membership membership) throws ConditionException {
-    final ValueNode value = value(membership.value());
+    final ValueNode value = coerce(value(membership.value()), candidateType(membership));
     final Class<?> type = value.type();
     final List<Object> candidates = new ArrayList<>();
     for (final Operand.Literal literal : membership.candidates()) {
@@ -159,16 +166,27 @@ public final class ConditionTyper {
     throw mismatch("'in' needs a string, number or boolean, got " + Types.describe(type));
   }
 
+  /** The normalised type of the first non-null {@code in} candidate, or {@code Object}. */
+  private static Class<?> candidateType(final Expression.Membership membership) {
+    for (final Operand.Literal literal : membership.candidates()) {
+      if (literal.value() != null) {
+        return Types.normalise(literal.value().getClass());
+      }
+    }
+    return Object.class;
+  }
+
   private Condition textFunction(final Expression.TextFunction function) throws ConditionException {
     final TextFunctionName name = function.function();
     final ValueNode haystack = value(function.haystack());
-    final ValueNode needle = value(function.needle());
+    final ValueNode needle = coerce(value(function.needle()), String.class);
     if (needle.type() != String.class) {
       throw mismatch(
           name + " needs a string as second argument, got " + Types.describe(needle.type()));
     }
     return switch (name) {
-      case LIKE, ILIKE -> like(name == TextFunctionName.ILIKE, haystack, needle, function);
+      case LIKE, ILIKE ->
+          like(name == TextFunctionName.ILIKE, coerce(haystack, String.class), needle, function);
       case CONTAINS, ICONTAINS -> contains(name, haystack, needle);
     };
   }
@@ -226,8 +244,9 @@ public final class ConditionTyper {
   }
 
   private ValueNode arithmetic(final Operand.Arithmetic arithmetic) throws ConditionException {
-    final ValueNode left = value(arithmetic.left());
-    final ValueNode right = value(arithmetic.right());
+    final ValueNode typedLeft = value(arithmetic.left());
+    final ValueNode right = coerce(value(arithmetic.right()), typedLeft.type());
+    final ValueNode left = coerce(typedLeft, right.type());
     if (!Types.isNumeric(left.type()) || !Types.isNumeric(right.type())) {
       throw mismatch(
           "arithmetic needs numbers, got "
@@ -246,29 +265,29 @@ public final class ConditionTyper {
 
   /** The static type of a path, checking every property on the way. */
   private Class<?> staticType(final CompiledPath path) throws ConditionException {
-    Class<?> type = rootType(path.root());
-    if (path.hasRootIndex() && type != Object.class) {
+    Type type = rootType(path.root());
+    if (path.hasRootIndex()) {
       type = elementType(path, path.root() + "[" + path.rootIndex() + "]", type);
     }
     for (final PathSegment segment : path.segments()) {
-      if (type == Object.class) {
+      final Class<?> raw = GenericTypes.erase(type);
+      if (raw == Object.class) {
         return Object.class;
       }
-      if (Map.class.isAssignableFrom(type)) {
+      if (Map.class.isAssignableFrom(raw)) {
         throw new ConditionException(
             Category.MAP_UNSUPPORTED, "'" + path + "' navigates into a Map");
       }
-      if (type.isArray() || Iterable.class.isAssignableFrom(type)) {
+      if (raw.isArray() || Iterable.class.isAssignableFrom(raw)) {
         throw collectionNotSupported(path, segment);
       }
-      final Class<?> owningType = type;
       type =
-          PropertyAccessors.propertyType(owningType, segment.property())
+          PropertyAccessors.propertyGenericType(type, segment.property())
               .orElseThrow(
                   () ->
                       new ConditionException(
                           Category.UNKNOWN_PROPERTY,
-                          PropertyAccessors.describeMissing(owningType, segment.property())
+                          PropertyAccessors.describeMissing(raw, segment.property())
                               + " (in '"
                               + path
                               + "')"));
@@ -276,30 +295,26 @@ public final class ConditionTyper {
         type = elementType(path, segment.toString(), type);
       }
     }
-    return type;
+    return GenericTypes.erase(type);
   }
 
   /**
-   * The type of {@code indexed[i]}: the component type of an array.
+   * The type of {@code indexed[i]}: the generic element type of an array or {@code Iterable};
+   * {@code Object} (dynamic) when it is not in the code or the indexed value is itself {@code
+   * Object}.
    *
    * @param segment how the indexed part is shown in messages ({@code seats[0]}, {@code $return[0]})
    */
-  private static Class<?> elementType(
-      final CompiledPath path, final String segment, final Class<?> type)
+  private static Type elementType(final CompiledPath path, final String segment, final Type type)
       throws ConditionException {
-    if (type.isArray()) {
-      return type.getComponentType();
+    if (GenericTypes.erase(type) == Object.class) {
+      return Object.class;
     }
-    if (Iterable.class.isAssignableFrom(type)) {
-      throw new ConditionException(
-          Category.ERASED_COLLECTION_TYPE,
-          "the element type of '"
-              + segment
-              + "' in '"
-              + path
-              + "' is unknown (generic collection)");
+    if (Map.class.isAssignableFrom(GenericTypes.erase(type))) {
+      throw mismatch("'" + segment + "' in '" + path + "' cannot be indexed");
     }
-    throw mismatch("'" + segment + "' in '" + path + "' cannot be indexed");
+    return GenericTypes.elementType(type)
+        .orElseThrow(() -> mismatch("'" + segment + "' in '" + path + "' cannot be indexed"));
   }
 
   /**
@@ -313,16 +328,27 @@ public final class ConditionTyper {
         "'" + segment.property() + "' is applied to a collection in '" + path + "'");
   }
 
-  private Class<?> rootType(final PathRoot root) {
+  private Type rootType(final PathRoot root) {
     return switch (root) {
       case PathRoot.This ignored -> signature.self();
       case PathRoot.Return ignored ->
-          signature.returnType() == void.class ? Object.class : signature.returnType();
+          signature.returnType() == void.class ? Object.class : signature.genericReturnType();
       case PathRoot.Argument argument ->
-          argument.index() < signature.parameterTypes().size()
-              ? signature.parameterTypes().get(argument.index())
+          argument.index() < signature.genericParameterTypes().size()
+              ? signature.genericParameterTypes().get(argument.index())
               : Object.class;
     };
+  }
+
+  /**
+   * A dynamic operand (static type {@code Object}) facing a {@code String}, {@code Long}, {@code
+   * Double} or {@code Boolean} takes that type, checked when evaluated; any other node is returned
+   * unchanged.
+   */
+  private static ValueNode coerce(final ValueNode node, final Class<?> type) {
+    return node.type() == Object.class && ValueNode.Coerced.supports(type)
+        ? new ValueNode.Coerced(node, type)
+        : node;
   }
 
   private static ConditionException mismatch(final String detail) {

@@ -75,19 +75,42 @@ Limits: an expression is at most 4 096 characters and nests at most 64 levels de
 
 ## 3. Types
 
-Every operand gets a static type when the rule binds to a class:
+Every operand gets a static type when the rule binds to a class. Types are read from the generic
+signatures, so `List<Tree>` is known to contain `Tree`s:
 
 | Source | Static type |
 |---|---|
 | `$this` | the runtime class of the receiver |
-| `$argN` | declared parameter type (`Object` if the method has fewer parameters) |
-| `$return` | declared return type (`Object` for `void` — value is always `null`) |
-| `.property` | return type of `getX()` / `isX()`, or the type of public field `x` |
-| `[i]` (after a property or on the root: `$return[0]`) | component type of an array; for a `List`/`Iterable` see "erased collection type"; on any other type a `type mismatch` |
+| `$argN` | declared (generic) parameter type (`Object` if the method has fewer parameters) |
+| `$return` | declared (generic) return type (`Object` for `void` — value is always `null`) |
+| `.property` | (generic) return type of `getX()` / `isX()` / record accessor, or the type of public field `x` |
+| `[i]` (after a property or on the root: `$return[0]`) | element type of an array or `Iterable`: `List<Tree>` → `Tree`, `List<? extends Tree>` → `Tree`, `Tree[]` → `Tree`; `Object` (dynamic) for `List<?>`, a raw `List` or `List<T>` with an unbounded `T`; on any other type a `type mismatch` |
 | literals | `String`, `Long` (integers), `Double` (decimals), `Boolean`, null |
 
+Type variables are resolved through the receiver's class hierarchy: with
+`class Forest extends Base<Tree>` and `List<T> getTree()` declared in `Base<T>`, `$return[0]` on
+`Forest.getTree` is a `Tree`. A variable that cannot be resolved stands for its bound
+(`T extends Tree` → `Tree`, unbounded → `Object`).
+
 Normalisation: `byte short int long` (and wrappers) → **Long**; `float double` → **Double**;
-`boolean` → **Boolean**. A value of static type `Object` is not checked further.
+`boolean` → **Boolean**.
+
+**Dynamic values.** A value of static type `Object` is not checked further (properties after it
+are resolved at runtime) and takes its type from its counterpart:
+
+| Use | Type taken | At runtime |
+|---|---|---|
+| `x == 'a'`, `x != 'a'`, `x == $arg0.brand` | `String` | must be a `String` |
+| `x gt 10`, `x + 1 == 6` | `Long` | must be `byte`/`short`/`int`/`long` |
+| `x gt 1.5` | `Double` | must be `float`/`double` |
+| `x in ['a', 'b']`, `x in [1, 2]` | type of the literals | as above |
+| `like(x, 'a%')`, `ilike(x, …)` | `String` | must be a `String` |
+| `x` as condition, `not x` | `Boolean` | must be a `Boolean` |
+| `x == y` with both dynamic | — | `equals` |
+
+A value of another type counts as `null`, so the condition is `false`. Because nothing is
+checked at load, a typo after a dynamic value (`$return[0].colr`) is not reported: the condition
+is simply never `true`.
 
 | Operation | Allowed operand types |
 |---|---|
@@ -140,15 +163,15 @@ active. One warning names the rule and the category:
 | Category | Typical cause |
 |---|---|
 | `syntax error` | unclosed parenthesis or string, `&&`, unknown character, invalid path, too long or nested too deep |
-| `type mismatch` | `$arg0.brand == 42`, `$arg0.mileage gt 1.5`, non-boolean used as condition, `$arg0[0]` when `$arg0` is no array or collection |
+| `type mismatch` | `$arg0.brand == 42`, `$arg0.mileage gt 1.5`, non-boolean used as condition, `$arg0[0]` when `$arg0` is no array or collection, two dynamic values in `gt`/arithmetic |
 | `unknown function` | `length($arg0.brand)` |
 | `unknown property` | `$arg0.colour` when `Car` has no `getColour()`/`isColour()`/`colour`; a property of a protected JDK type ([06-config-xml.md](06-config-xml.md) §6) |
-| `erased collection type` | `$arg0.passengers[1].name`, or `$return[0].color` when the method returns `List<Tree>` — element type of a generic `List` is unknown (an attribute path with the same text works; an array `Tree[]` works in both) |
+| `erased collection type` | `$arg0.passengers.name == 'Jan'` — a property applied to a whole collection (use `[i]`, `size()` or `contains()`) |
 | `map unsupported` | `$arg0.labels.key` when `labels` is a `Map` |
 | `wrong arity` | `size(a, b)`, `like(a)` |
 
-Known limits (see `openspec/BACKLOG.md`): no `Map` access, no generic element-type inference for
-collections in conditions, no mixed `Long`/`Double` comparisons.
+Known limits (see `openspec/BACKLOG.md`): no `Map` access, no "any element" test on a collection
+(`passengers.name == 'Jan'`), no mixed `Long`/`Double` comparisons, no enum ↔ string comparison.
 
 ---
 
@@ -163,6 +186,8 @@ not ($arg0.brand == 'audi') and $arg0.electric
 ($arg0.mileage + 500) / 2 gte 10000
 $return.accepted and $return.status != 'rejected'
 $arg0.seats[0].name == 'Kees'
-$return[0].color == 'green'                  (method returns Tree[])
+$return[0].color == 'green'                  (method returns List<Tree> or Tree[])
+$arg0.passengers[1].name == 'Jan'
+$return[0].status == 'open'                  (method returns List<?>: checked at runtime)
 $arg0.customer != null and $arg0.customer.country == 'NL'
 ```
