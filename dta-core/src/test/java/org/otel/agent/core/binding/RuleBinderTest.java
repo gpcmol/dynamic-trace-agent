@@ -1,6 +1,7 @@
 package org.otel.agent.core.binding;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -190,6 +191,80 @@ class RuleBinderTest {
             method(Garage.class, "park"));
 
     assertEquals(1, binding.rules().size());
+  }
+
+  @Test
+  void indexedArrayRootIsCheckedAndRead() throws Exception {
+    final MethodBinding binding =
+        RuleBinder.bind(
+            snapshot(
+                rule(
+                    "Garage",
+                    "history",
+                    """
+                    <when>$return[0].accepted</when>
+                    <attribute key="first" path="$return[0].accepted"/>
+                    """)),
+            Garage.class,
+            method(Garage.class, "history"));
+
+    assertTrue(binding.problems().isEmpty());
+    final BoundRule rule = binding.rules().get(0);
+    final Frame frame = new Frame(new Garage(), new Garage().history(), null);
+    assertTrue(Condition.evaluate(rule.condition(), frame));
+    assertEquals(true, rule.attributes().get(0).reader().read(frame));
+  }
+
+  @Test
+  void unknownPropertyAfterAnArrayRootIsAProblem() throws Exception {
+    final MethodBinding binding =
+        RuleBinder.bind(
+            snapshot(
+                rule(
+                    "Garage",
+                    "history",
+"""
+<attribute key="x" path="$return[0].missing"/>""")),
+            Garage.class,
+            method(Garage.class, "history"));
+
+    assertTrue(binding.isEmpty());
+    assertTrue(binding.problems().get(0).reason().contains("'missing'"));
+  }
+
+  @Test
+  void propertyAfterAListRootIsResolvedAtRuntime() throws Exception {
+    final MethodBinding binding =
+        RuleBinder.bind(
+            snapshot(
+                rule(
+                    "Garage",
+                    "recent",
+                    """
+                    <attribute key="first" path="$return[0].accepted"/>
+                    <attribute key="x" path="$return[0].missing"/>
+                    """)),
+            Garage.class,
+            method(Garage.class, "recent"));
+
+    assertTrue(binding.problems().isEmpty());
+    final Frame frame = new Frame(new Garage(), new Garage().recent(), null);
+    assertEquals(false, binding.rules().get(0).attributes().get(0).reader().read(frame));
+    assertNull(binding.rules().get(0).attributes().get(1).reader().read(frame));
+  }
+
+  @Test
+  void listRootInAConditionIsAnErasedCollection() throws Exception {
+    final MethodBinding binding =
+        RuleBinder.bind(
+            snapshot(rule("Garage", "recent", "<when>$return[0].accepted</when>")),
+            Garage.class,
+            method(Garage.class, "recent"));
+
+    assertTrue(binding.isEmpty());
+    assertTrue(
+        binding.problems().get(0).reason().startsWith("condition: erased collection type"),
+        binding.problems().get(0).reason());
   }
 
   @Test

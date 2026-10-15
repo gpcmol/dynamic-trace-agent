@@ -1,5 +1,7 @@
 package com.example.binding;
 
+import java.util.List;
+
 /**
  * Application-like classes for binder tests. They live outside {@code org.otel.agent}, because
  * rules on the agent's own packages are rejected as protected.
@@ -40,6 +42,16 @@ public final class BindingFixtures {
   public static final class Garage {
     public Result park(final Car car) {
       return new Result(true);
+    }
+
+    /** Array return: the element type is known. */
+    public Result[] history() {
+      return new Result[] {new Result(true)};
+    }
+
+    /** Generic list return: the element type is erased. */
+    public List<Result> recent() {
+      return List.of(new Result(false));
     }
   }
 }

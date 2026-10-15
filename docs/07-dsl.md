@@ -51,7 +51,7 @@ atom       := NUMBER | STRING | 'true' | 'false' | 'null' | PATH
 compareOp  := '==' | '!=' | 'lt' | 'lte' | 'gt' | 'gte'
 literal    := [ '-' ] NUMBER | STRING | 'true' | 'false' | 'null'
 
-PATH       := '$this' | '$return' | '$arg' N  ( '.' property ( '[' index ']' )? )*
+PATH       := ( '$this' | '$return' | '$arg' N ) ( '[' index ']' )?  ( '.' property ( '[' index ']' )? )*
 STRING     := '…' | "…"            (no escapes; use the other quote to include one)
 NUMBER     := digits | digits '.' digits
 ```
@@ -83,7 +83,7 @@ Every operand gets a static type when the rule binds to a class:
 | `$argN` | declared parameter type (`Object` if the method has fewer parameters) |
 | `$return` | declared return type (`Object` for `void` — value is always `null`) |
 | `.property` | return type of `getX()` / `isX()`, or the type of public field `x` |
-| `[i]` | component type of an array; for a `List`/`Iterable` see "erased collection type" |
+| `[i]` (after a property or on the root: `$return[0]`) | component type of an array; for a `List`/`Iterable` see "erased collection type"; on any other type a `type mismatch` |
 | literals | `String`, `Long` (integers), `Double` (decimals), `Boolean`, null |
 
 Normalisation: `byte short int long` (and wrappers) → **Long**; `float double` → **Double**;
@@ -140,10 +140,10 @@ active. One warning names the rule and the category:
 | Category | Typical cause |
 |---|---|
 | `syntax error` | unclosed parenthesis or string, `&&`, unknown character, invalid path, too long or nested too deep |
-| `type mismatch` | `$arg0.brand == 42`, `$arg0.mileage gt 1.5`, non-boolean used as condition |
+| `type mismatch` | `$arg0.brand == 42`, `$arg0.mileage gt 1.5`, non-boolean used as condition, `$arg0[0]` when `$arg0` is no array or collection |
 | `unknown function` | `length($arg0.brand)` |
 | `unknown property` | `$arg0.colour` when `Car` has no `getColour()`/`isColour()`/`colour`; a property of a protected JDK type ([06-config-xml.md](06-config-xml.md) §6) |
-| `erased collection type` | `$arg0.passengers[1].name` — element type of a generic `List` is unknown |
+| `erased collection type` | `$arg0.passengers[1].name`, or `$return[0].color` when the method returns `List<Tree>` — element type of a generic `List` is unknown (an attribute path with the same text works; an array `Tree[]` works in both) |
 | `map unsupported` | `$arg0.labels.key` when `labels` is a `Map` |
 | `wrong arity` | `size(a, b)`, `like(a)` |
 
@@ -163,5 +163,6 @@ not ($arg0.brand == 'audi') and $arg0.electric
 ($arg0.mileage + 500) / 2 gte 10000
 $return.accepted and $return.status != 'rejected'
 $arg0.seats[0].name == 'Kees'
+$return[0].color == 'green'                  (method returns Tree[])
 $arg0.customer != null and $arg0.customer.country == 'NL'
 ```

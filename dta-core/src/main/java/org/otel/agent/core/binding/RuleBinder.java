@@ -111,6 +111,9 @@ public final class RuleBinder {
       final CompiledAttribute attribute, final ExitSignature signature) throws BindingException {
     final CompiledPath path = attribute.path();
     Class<?> type = rootType(path.root(), signature);
+    if (path.hasRootIndex() && type != null) {
+      type = componentTypeOrNull(type);
+    }
     for (final PathSegment segment : path.segments()) {
       if (type == null || !isExactType(type)) {
         return;

@@ -304,6 +304,88 @@ class ConditionTest {
   }
 
   @Nested
+  class RootIndex {
+
+    /** {@code Passenger[] board(Passenger[] queue, List<Passenger> list)}. */
+    private static final ExitSignature BOARD =
+        new ExitSignature(Garage.class, List.of(Passenger[].class, List.class), Passenger[].class);
+
+    private static final Frame BOARDED =
+        new Frame(
+            new Garage(),
+            new Passenger[] {new Passenger("Kees")},
+            new Passenger[] {new Passenger("Jan"), new Passenger("Piet")},
+            List.of(new Passenger("Eva")));
+
+    private static Condition compileBoard(final String text) throws ConditionException {
+      return ConditionTyper.type(ExpressionParser.parse(text), BOARD, ConditionTest.class);
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = '|',
+        value = {
+          "$return[0].name == 'Kees' | true",
+          "$return[0].name == 'Jan' | false",
+          "$arg0[1].name == 'Piet' | true",
+          "$return[0] != null | true",
+          "$return[1] == null | true",
+          "$arg0[5].name == null | true"
+        })
+    void arrayRootIsTyped(final String text, final boolean expected) throws Exception {
+      assertEquals(expected, Condition.evaluate(compileBoard(text), BOARDED), text);
+    }
+
+    @Test
+    void nullRootIsFalse() throws Exception {
+      final Frame nothing = new Frame(new Garage(), null, null, null);
+
+      assertFalse(Condition.evaluate(compileBoard("$return[0].name == 'Kees'"), nothing));
+      assertTrue(Condition.evaluate(compileBoard("$return[0] == null"), nothing));
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = '|',
+        value = {
+          "$arg1[0] == null | ERASED_COLLECTION_TYPE",
+          "$return[0].missing == 'x' | UNKNOWN_PROPERTY",
+          "$return[0].name == 42 | TYPE_MISMATCH"
+        })
+    void rejectsOnArraySignature(final String text, final Category category) {
+      final ConditionException exception =
+          assertThrows(ConditionException.class, () -> compileBoard(text));
+
+      assertEquals(category, exception.category(), exception.getMessage());
+    }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = '|',
+        value = {"$arg0[0].brand == 'bmw' | TYPE_MISMATCH", "$arg1[0] == 1 | TYPE_MISMATCH"})
+    void rejectsIndexOnANonCollection(final String text, final Category category) {
+      final ConditionException exception =
+          assertThrows(ConditionException.class, () -> compile(text));
+
+      assertEquals(category, exception.category(), exception.getMessage());
+      assertTrue(exception.getMessage().contains("cannot be indexed"), exception.getMessage());
+    }
+
+    @Test
+    void erasedRootMessageNamesTheIndexedRoot() {
+      final ConditionException exception =
+          assertThrows(ConditionException.class, () -> compileBoard("$arg1[0] == null"));
+
+      assertTrue(exception.getMessage().contains("'$arg1[0]'"), exception.getMessage());
+    }
+
+    @Test
+    void rootOfStaticTypeObjectIsNotCheckedFurther() throws Exception {
+      compile("$arg5[0].anything == null");
+    }
+  }
+
+  @Nested
   class Like {
 
     @ParameterizedTest

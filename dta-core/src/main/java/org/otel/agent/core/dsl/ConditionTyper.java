@@ -247,6 +247,9 @@ public final class ConditionTyper {
   /** The static type of a path, checking every property on the way. */
   private Class<?> staticType(final CompiledPath path) throws ConditionException {
     Class<?> type = rootType(path.root());
+    if (path.hasRootIndex() && type != Object.class) {
+      type = elementType(path, path.root() + "[" + path.rootIndex() + "]", type);
+    }
     for (final PathSegment segment : path.segments()) {
       if (type == Object.class) {
         return Object.class;
@@ -270,14 +273,19 @@ public final class ConditionTyper {
                               + path
                               + "')"));
       if (segment.isIndexed()) {
-        type = elementType(path, segment, type);
+        type = elementType(path, segment.toString(), type);
       }
     }
     return type;
   }
 
+  /**
+   * The type of {@code indexed[i]}: the component type of an array.
+   *
+   * @param segment how the indexed part is shown in messages ({@code seats[0]}, {@code $return[0]})
+   */
   private static Class<?> elementType(
-      final CompiledPath path, final PathSegment segment, final Class<?> type)
+      final CompiledPath path, final String segment, final Class<?> type)
       throws ConditionException {
     if (type.isArray()) {
       return type.getComponentType();

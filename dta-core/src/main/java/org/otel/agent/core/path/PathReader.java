@@ -17,7 +17,8 @@ import org.otel.agent.core.value.AttributeValues;
  *   <li>A {@code null} or {@code Map} on the way, a missing property or a throwing getter gives
  *       {@code null}. Nothing ever throws.
  *   <li>{@code [i]} selects from an array, a {@code List} or (by iteration) any {@code Iterable};
- *       out of range gives {@code null}.
+ *       out of range gives {@code null}. A root index ({@code $return[0]}) selects from the root
+ *       value the same way; a root that is no array or {@code Iterable} gives {@code null}.
  *   <li>A property applied to an array or {@code Iterable} is applied to every element; all
  *       non-null results are collected into one flat {@code List}.
  *   <li>At most {@link AttributeValues#MAX_LIST_SIZE} elements of a collection are read, so a huge
@@ -35,10 +36,12 @@ import org.otel.agent.core.value.AttributeValues;
 public final class PathReader {
 
   private final CompiledPath path;
+  private final int rootIndex;
   private final SegmentReader[] segments;
 
   private PathReader(final CompiledPath path, final ClassLoader ownerLoader) {
     this.path = path;
+    this.rootIndex = path.rootIndex();
     this.segments = new SegmentReader[path.segments().size()];
     for (int i = 0; i < segments.length; i++) {
       segments[i] = new SegmentReader(path.segments().get(i), ownerLoader);
@@ -65,13 +68,14 @@ public final class PathReader {
 
   /** The value starting from an explicit root object, or {@code null}. */
   public Object readFrom(final Object root) {
-    if (root == null) {
+    final Object start = rootIndex == PathSegment.NO_INDEX ? root : select(root, rootIndex);
+    if (start == null) {
       return null;
     }
     if (segments.length == 0) {
-      return root;
+      return start;
     }
-    return resolve(root, 0);
+    return resolve(start, 0);
   }
 
   private Object resolve(final Object current, final int position) {
@@ -142,6 +146,31 @@ public final class PathReader {
     return value instanceof Iterable<?> || value.getClass().isArray();
   }
 
+  /** Element {@code index} of an array or {@code Iterable}; {@code null} for anything else. */
+  private static Object select(final Object value, final int index) {
+    if (value == null) {
+      return null;
+    }
+    if (value.getClass().isArray()) {
+      return index < Array.getLength(value) ? Array.get(value, index) : null;
+    }
+    if (value instanceof List<?> list) {
+      return index < list.size() ? list.get(index) : null;
+    }
+    // Other Iterables are walked; one of unknown size only as far as MAX_LIST_SIZE.
+    final int limit =
+        value instanceof Collection<?> sized ? sized.size() : AttributeValues.MAX_LIST_SIZE;
+    if (value instanceof Iterable<?> iterable && index < limit) {
+      int position = 0;
+      for (final Object element : iterable) {
+        if (position++ == index) {
+          return element;
+        }
+      }
+    }
+    return null;
+  }
+
   /** One segment with a monomorphic inline cache of (class → reader). */
   private static final class SegmentReader {
     private final String property;
@@ -186,30 +215,6 @@ public final class PathReader {
         cached = new Cached(type, reader);
       }
       return reader;
-    }
-
-    private static Object select(final Object value, final int index) {
-      if (value == null) {
-        return null;
-      }
-      if (value.getClass().isArray()) {
-        return index < Array.getLength(value) ? Array.get(value, index) : null;
-      }
-      if (value instanceof List<?> list) {
-        return index < list.size() ? list.get(index) : null;
-      }
-      // Other Iterables are walked; one of unknown size only as far as MAX_LIST_SIZE.
-      final int limit =
-          value instanceof Collection<?> sized ? sized.size() : AttributeValues.MAX_LIST_SIZE;
-      if (value instanceof Iterable<?> iterable && index < limit) {
-        int position = 0;
-        for (final Object element : iterable) {
-          if (position++ == index) {
-            return element;
-          }
-        }
-      }
-      return null;
     }
 
     /**

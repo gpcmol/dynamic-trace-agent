@@ -33,8 +33,8 @@ import org.otel.agent.core.path.PathReader;
 @Fork(1)
 public class PathAndConditionBenchmark {
 
-  private final Car bmw =
-      new Car("bmw", "x5", 2024, 50_000, List.of(new Passenger("Jan"), new Passenger("Piet")));
+  private final List<Passenger> passengers = List.of(new Passenger("Jan"), new Passenger("Piet"));
+  private final Car bmw = new Car("bmw", "x5", 2024, 50_000, passengers);
   private final ExitFrame frame =
       new ExitFrame() {
         @Override
@@ -49,12 +49,17 @@ public class PathAndConditionBenchmark {
 
         @Override
         public Object argument(final int index) {
-          return index == 0 ? bmw : null;
+          return switch (index) {
+            case 0 -> bmw;
+            case 1 -> passengers;
+            default -> null;
+          };
         }
       };
 
   private PathReader brand;
   private PathReader secondPassenger;
+  private PathReader indexedRoot;
   private Condition referenceCondition;
 
   @Setup
@@ -62,6 +67,7 @@ public class PathAndConditionBenchmark {
     brand = PathReader.ownedBy(PathCompiler.attributePath("$arg0.brand"), Garage.class);
     secondPassenger =
         PathReader.ownedBy(PathCompiler.attributePath("$arg0.passengers[1].name"), Garage.class);
+    indexedRoot = PathReader.ownedBy(PathCompiler.attributePath("$arg1[1].name"), Garage.class);
     referenceCondition =
         ConditionTyper.type(
             ExpressionParser.parse(
@@ -79,6 +85,11 @@ public class PathAndConditionBenchmark {
   @Benchmark
   public Object readIndexedNestedProperty() {
     return secondPassenger.read(frame);
+  }
+
+  @Benchmark
+  public Object readIndexedRoot() {
+    return indexedRoot.read(frame);
   }
 
   @Benchmark

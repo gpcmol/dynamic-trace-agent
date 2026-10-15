@@ -32,6 +32,14 @@ class LexerTest {
   }
 
   @Test
+  void indexedRootIsOnePathToken() throws Exception {
+    final List<Token> tokens = Lexer.tokenize("$return[0].color == 'green'");
+
+    assertEquals(Token.Type.PATH, tokens.get(0).type());
+    assertEquals("$return[0].color", tokens.get(0).text());
+  }
+
+  @Test
   void stringLiteralsUseEitherQuoteWithoutEscapes() throws Exception {
     final List<Token> tokens = Lexer.tokenize("\"it's\" 'say \"hi\"'");
 
