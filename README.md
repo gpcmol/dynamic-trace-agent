@@ -122,6 +122,18 @@ Each snippet is one `<rule>` inside `<dynamic>`; the `<static>` attributes of th
 too whenever a rule matches. Syntax: [docs/06-config-xml.md](docs/06-config-xml.md) (paths) and
 [docs/07-dsl.md](docs/07-dsl.md) (`<when>`).
 
+**Always enrich**: `<when>` is optional. Without it the rule matches every call: each time the
+method returns, its attributes (and the static ones) are written on the current span — or, if there
+is none, on a fallback `INTERNAL` span `dynamic-trace.enrichment`.
+
+```xml
+<rule>
+    <selector><class name="com.example.shop.OrderService"/><method name="placeOrder"/></selector>
+    <attribute key="order.id"     path="$arg0.id"/>
+    <attribute key="order.status" path="$return.status"/>
+</rule>
+```
+
 **Keep every trace of one customer during an incident** — no attributes needed: the static
 `debug=true` is the tail-sampling marker.
 
