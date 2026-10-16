@@ -23,38 +23,43 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.release>21</maven.compiler.release>
+    <!-- The extension runs in the application's JVM: shipped code targets Java 17. Tests may use
+         Java 21; building needs JDK 21+ (enforcer below). -->
+    <maven.compiler.release>17</maven.compiler.release>
+    <maven.compiler.testRelease>21</maven.compiler.testRelease>
 
     <!-- OpenTelemetry agent line this extension is built and tested against.
          All agent-provided libraries are 'provided': the agent supplies them at runtime. -->
-    <otel.agent.version>2.30.0</otel.agent.version>
-    <otel.extension-api.version>2.30.0-alpha</otel.extension-api.version>
+    <otel.agent.version>2.32.0</otel.agent.version>
+    <otel.extension-api.version>2.32.0-alpha</otel.extension-api.version>
     <autoservice.version>1.1.1</autoservice.version>
 
     <!-- Demo application and test OTLP receiver only; not part of the extension jar. -->
-    <otel.proto.version>1.10.0-alpha</otel.proto.version>
-    <protobuf.version>4.35.1</protobuf.version>
+    <otel.proto.version>1.11.1-alpha</otel.proto.version>
+    <protobuf.version>4.36.2</protobuf.version>
     <jackson.version>2.22.3</jackson.version>
 
-    <junit.version>5.13.4</junit.version>
-    <archunit.version>1.3.0</archunit.version>
+    <junit.version>6.1.3</junit.version>
+    <archunit.version>1.5.1</archunit.version>
     <jmh.version>1.37</jmh.version>
-    <errorprone.version>2.36.0</errorprone.version>
-    <!-- Not updated by lcm.sh: a newer formatter needs a newer major version of the Spotless plugin
-         and reformats the sources. Update the two together, by hand. -->
+    <errorprone.version>2.50.0</errorprone.version>
+    <!-- Not updated by lcm.sh: a newer formatter may not run on the current Spotless plugin and
+         reformats the sources. Update the two together, by hand (1.37.0 fails on Spotless 3.10.4
+         and reformats ~10 files: kept at 1.35.0, 2026-10-16). -->
+
     <google-java-format.version>1.35.0</google-java-format.version>
 
     <!-- Build plugins. Every version is a property that is used in (plugin) dependency management
          below, so that the versions plugin can update all of them (lcm.sh). -->
-    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
-    <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
-    <maven-dependency-plugin.version>3.8.1</maven-dependency-plugin.version>
-    <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
-    <maven-help-plugin.version>3.5.1</maven-help-plugin.version>
-    <spotless-maven-plugin.version>2.44.0</spotless-maven-plugin.version>
-    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
+    <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
+    <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
+    <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
+    <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+    <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+    <maven-help-plugin.version>3.5.2</maven-help-plugin.version>
+    <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
+    <versions-maven-plugin.version>2.22.0</versions-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -169,8 +174,11 @@
           <version>${maven-compiler-plugin.version}</version>
           <configuration>
             <release>${maven.compiler.release}</release>
+            <testRelease>${maven.compiler.testRelease}</testRelease>
             <compilerArgs>
               <arg>-XDcompilePolicy=simple</arg>
+              <!-- Required by Error Prone 2.4x+ on JDK 21 (JDK-8225377 backport). -->
+              <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
               <arg>--should-stop=ifError=FLOW</arg>
               <arg>-Xplugin:ErrorProne -XepDisableWarningsInGeneratedCode -XepExcludedPaths:.*/target/generated-sources/.*</arg>
               <arg>-Xlint:all,-processing,-serial</arg>

@@ -14,6 +14,7 @@ mvn -pl dta-core test            # fast loop on pure logic
 | Gate | Tool | Fails on |
 |---|---|---|
 | formatting | Spotless (google-java-format) | unformatted code |
+| Java 17 runtime | `javac --release 17` (main code), `PackagingIT` | a Java 18+ language feature or JDK API in shipped code |
 | bug patterns | Error Prone (warnings shown, errors fail) | e.g. wrong format strings, unclosed resources |
 | dependencies | Maven enforcer | `dta-core` / `dta-gateway` depending on anything but the JDK |
 | architecture | ArchUnit (`ArchitectureTest`) | package cycles, core/gateway depending outside the JDK, advice code using non-gateway classes, `Map<Class,…>` fields, `Class` fields in config/plan/snapshot/expressions |
@@ -40,6 +41,10 @@ with plain JUnit.
 
 - One responsibility per class; a class comment says what it is for and, where relevant, how it
   behaves on the hot path and for memory.
+- Main code targets **Java 17** (the extension runs in the application's JVM); tests may use
+  Java 21. No pattern-matching `switch`: use an `instanceof` chain over the sealed type that ends
+  in `throw new IllegalStateException(...)` (a `RuntimeException`, so the established boundaries
+  catch it).
 - Immutable data as `record`s with validating compact constructors; `List.copyOf` for collections.
 - Explicit names over abbreviations (`selectedRules`, not `sr`). No "util" packages.
 - `final` parameters and locals, as in the existing code.
@@ -54,11 +59,11 @@ with plain JUnit.
 
 ```
             ┌───────────────────────────────┐
-            │  dta-integration-tests (11)   │  real agent, real JVM, live reloads
+            │  dta-integration-tests (12)   │  real agent, real JVM, live reloads
             ├───────────────────────────────┤
-            │  dta-extension (59)           │  engine with OTel SDK, matchers, reload, memory
+            │  dta-extension (64)           │  engine with OTel SDK, matchers, reload, memory
             ├───────────────────────────────┤
-            │  dta-core (356)               │  parser, paths, DSL, plan, snapshot, binder
+            │  dta-core (442)               │  parser, paths, DSL, plan, snapshot, binder
             └───────────────────────────────┘
 ```
 
@@ -133,7 +138,7 @@ M = measured manually in the spike, R = review / by construction):
 | hot-path-performance (8) | 4 | JMH allocation profile, condition true: B; no locks under concurrency: R |
 | memory-safety (7) | 6 | many distinct runtime classes: R (one accessor per class, never evicted) |
 | diagnostics (4) | 3 | no values logged: R |
-| packaging-and-distribution (8) | 5 | new agent release: CI matrix; release tag: workflow (runs on GitHub) |
+| packaging-and-distribution (12) | 6 | new agent release, application on Java 17: CI matrix; Java 21 API in main code: compiler (`--release 17`); release tag: workflow (runs on GitHub); README: R |
 | benchmarking (4) | — | B (all), fresh checkout: R |
 
 Open (`openspec/BACKLOG.md`): macro scaling over 1/10/100 selected methods; multi-hour soak with heap and

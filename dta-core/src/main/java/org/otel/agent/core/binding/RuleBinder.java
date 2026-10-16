@@ -172,15 +172,18 @@ public final class RuleBinder {
   }
 
   private static Class<?> rootType(final PathRoot root, final ExitSignature signature) {
-    return switch (root) {
-      case PathRoot.This ignored -> signature.self();
-      case PathRoot.Return ignored ->
-          signature.returnType() == void.class ? null : signature.returnType();
-      case PathRoot.Argument argument ->
-          argument.index() < signature.parameterTypes().size()
-              ? signature.parameterTypes().get(argument.index())
-              : null;
-    };
+    if (root instanceof PathRoot.This) {
+      return signature.self();
+    }
+    if (root instanceof PathRoot.Return) {
+      return signature.returnType() == void.class ? null : signature.returnType();
+    }
+    if (root instanceof PathRoot.Argument argument) {
+      return argument.index() < signature.parameterTypes().size()
+          ? signature.parameterTypes().get(argument.index())
+          : null;
+    }
+    throw new IllegalStateException("unhandled path root " + root);
   }
 
   /** A rule cannot be bound to this class. */

@@ -14,7 +14,8 @@
   <name>dta-integration-tests</name>
   <description>End-to-end tests: the garage app with the real OpenTelemetry Java agent
     (${otel.agent.version}) and the packaged extension, exporting to an in-test OTLP receiver.
-    Select another agent with -Dotel.agent.version=… (CI matrix).</description>
+    Select another agent with -Dotel.agent.version=… and another JVM for the application with
+    -Dit.java.home=… (CI matrix).</description>
 
   <dependencies>
     <!-- Build order only: the tests use the packaged jars of these modules. -->

@@ -76,15 +76,28 @@ public final class ConditionTyper {
   }
 
   private Condition condition(final Expression expression) throws ConditionException {
-    return switch (expression) {
-      case Expression.And and -> new LogicalConditions.All(conditions(and.terms()));
-      case Expression.Or or -> new LogicalConditions.Any(conditions(or.terms()));
-      case Expression.Not not -> new LogicalConditions.Negation(condition(not.term()));
-      case Expression.Comparison comparison -> comparison(comparison);
-      case Expression.Membership membership -> membership(membership);
-      case Expression.TextFunction function -> textFunction(function);
-      case Expression.Truthy truthy -> truthy(truthy);
-    };
+    if (expression instanceof Expression.And and) {
+      return new LogicalConditions.All(conditions(and.terms()));
+    }
+    if (expression instanceof Expression.Or or) {
+      return new LogicalConditions.Any(conditions(or.terms()));
+    }
+    if (expression instanceof Expression.Not not) {
+      return new LogicalConditions.Negation(condition(not.term()));
+    }
+    if (expression instanceof Expression.Comparison comparison) {
+      return comparison(comparison);
+    }
+    if (expression instanceof Expression.Membership membership) {
+      return membership(membership);
+    }
+    if (expression instanceof Expression.TextFunction function) {
+      return textFunction(function);
+    }
+    if (expression instanceof Expression.Truthy truthy) {
+      return truthy(truthy);
+    }
+    throw new IllegalStateException("unhandled expression " + expression);
   }
 
   private Condition[] conditions(final List<Expression> terms) throws ConditionException {
@@ -218,12 +231,19 @@ public final class ConditionTyper {
   }
 
   private ValueNode value(final Operand operand) throws ConditionException {
-    return switch (operand) {
-      case Operand.Literal literal -> literal(literal);
-      case Operand.Reference reference -> reference(reference.path());
-      case Operand.Size size -> size(size);
-      case Operand.Arithmetic arithmetic -> arithmetic(arithmetic);
-    };
+    if (operand instanceof Operand.Literal literal) {
+      return literal(literal);
+    }
+    if (operand instanceof Operand.Reference reference) {
+      return reference(reference.path());
+    }
+    if (operand instanceof Operand.Size size) {
+      return size(size);
+    }
+    if (operand instanceof Operand.Arithmetic arithmetic) {
+      return arithmetic(arithmetic);
+    }
+    throw new IllegalStateException("unhandled operand " + operand);
   }
 
   private static ValueNode literal(final Operand.Literal literal) {
@@ -329,15 +349,18 @@ public final class ConditionTyper {
   }
 
   private Type rootType(final PathRoot root) {
-    return switch (root) {
-      case PathRoot.This ignored -> signature.self();
-      case PathRoot.Return ignored ->
-          signature.returnType() == void.class ? Object.class : signature.genericReturnType();
-      case PathRoot.Argument argument ->
-          argument.index() < signature.genericParameterTypes().size()
-              ? signature.genericParameterTypes().get(argument.index())
-              : Object.class;
-    };
+    if (root instanceof PathRoot.This) {
+      return signature.self();
+    }
+    if (root instanceof PathRoot.Return) {
+      return signature.returnType() == void.class ? Object.class : signature.genericReturnType();
+    }
+    if (root instanceof PathRoot.Argument argument) {
+      return argument.index() < signature.genericParameterTypes().size()
+          ? signature.genericParameterTypes().get(argument.index())
+          : Object.class;
+    }
+    throw new IllegalStateException("unhandled path root " + root);
   }
 
   /**
