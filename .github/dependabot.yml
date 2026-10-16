@@ -9,6 +9,16 @@ updates:
       - /dta-example-app
     schedule:
       interval: weekly
+    # Stay on the Java LTS line that CI builds and tests with (21): only patch updates. Move to the
+    # next LTS by hand, together with setup-java in the workflows.
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
+      - dependency-name: maven
+        update-types: ["version-update:semver-major"]
+      # The JDK is in the tag suffix (3.9.16-eclipse-temurin-21), not in the version.
+      - dependency-name: maven
+        versions: ["*-eclipse-temurin-2[2-9]*", "*-eclipse-temurin-3*"]
 
   - package-ecosystem: github-actions
     directory: /
