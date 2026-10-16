@@ -13,6 +13,9 @@ on:
   push:
     branches-ignore:
       - master
+      # Dependabot runs get no Actions secrets (GHCR_TOKEN), so they cannot publish a snapshot.
+      # Their pull request still builds, tests and builds the image.
+      - "dependabot/**"
   pull_request:
     branches:
       - master
