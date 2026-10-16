@@ -6,7 +6,7 @@
 
   <groupId>org.otel.agent</groupId>
   <artifactId>dynamic-trace-agent</artifactId>
-  <version>0.1.4</version>
+  <version>0.1.6</version>
   <packaging>pom</packaging>
 
   <name>Dynamic Trace Agent</name>
