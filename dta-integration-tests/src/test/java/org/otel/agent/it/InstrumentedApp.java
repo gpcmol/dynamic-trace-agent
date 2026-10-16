@@ -16,7 +16,8 @@ import java.util.Map;
 /**
  * The garage application running in its own JVM with the OpenTelemetry agent and the extension,
  * attached exactly like the OpenTelemetry Operator does it: {@code JAVA_TOOL_OPTIONS=-javaagent:…}
- * and {@code OTEL_JAVAAGENT_EXTENSIONS=<directory>}.
+ * and {@code OTEL_JAVAAGENT_EXTENSIONS=<directory>}. The JVM is {@code -Dit.java.home=…}, or the
+ * one running the tests when that is not set.
  */
 final class InstrumentedApp implements AutoCloseable {
 
@@ -41,7 +42,11 @@ final class InstrumentedApp implements AutoCloseable {
     final Path log = workDirectory.resolve("app.log");
 
     final List<String> command = new ArrayList<>();
-    command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+    // The application's JVM may differ from the one running the tests (CI: Java 17 and 21).
+    final String javaHome = System.getProperty("it.java.home", "");
+    command.add(
+        Path.of(javaHome.isBlank() ? System.getProperty("java.home") : javaHome, "bin", "java")
+            .toString());
     command.add("-jar");
     command.add(System.getProperty("it.app.jar"));
     final ProcessBuilder builder = new ProcessBuilder(command);

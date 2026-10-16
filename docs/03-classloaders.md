@@ -173,8 +173,8 @@ them must only run **after** injection. `AgentListener.afterAgent` therefore ins
 first and only then touches a class that references gateway types.
 
 `Instrumentation` itself comes from the OTel agent's bootstrap
-`io.opentelemetry.javaagent.bootstrap.InstrumentationHolder` (verified present in agent 2.30.0;
-internal API → wrapped in one adapter class).
+`io.opentelemetry.javaagent.bootstrap.InstrumentationHolder` (verified present in agents 2.30.0 to
+2.32.0; internal API → wrapped in one adapter class).
 
 ---
 

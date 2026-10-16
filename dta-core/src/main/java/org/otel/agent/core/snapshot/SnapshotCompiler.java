@@ -102,28 +102,47 @@ public final class SnapshotCompiler {
   }
 
   private static int maxArgumentIndex(final Expression expression) {
-    return switch (expression) {
-      case Expression.Or or ->
-          or.terms().stream().mapToInt(SnapshotCompiler::maxArgumentIndex).max().orElse(-1);
-      case Expression.And and ->
-          and.terms().stream().mapToInt(SnapshotCompiler::maxArgumentIndex).max().orElse(-1);
-      case Expression.Not not -> maxArgumentIndex(not.term());
-      case Expression.Comparison comparison ->
-          Math.max(maxArgumentIndex(comparison.left()), maxArgumentIndex(comparison.right()));
-      case Expression.Membership membership -> maxArgumentIndex(membership.value());
-      case Expression.TextFunction function ->
-          Math.max(maxArgumentIndex(function.haystack()), maxArgumentIndex(function.needle()));
-      case Expression.Truthy truthy -> maxArgumentIndex(truthy.operand());
-    };
+    if (expression instanceof Expression.Or or) {
+      return maxArgumentIndex(or.terms());
+    }
+    if (expression instanceof Expression.And and) {
+      return maxArgumentIndex(and.terms());
+    }
+    if (expression instanceof Expression.Not not) {
+      return maxArgumentIndex(not.term());
+    }
+    if (expression instanceof Expression.Comparison comparison) {
+      return Math.max(maxArgumentIndex(comparison.left()), maxArgumentIndex(comparison.right()));
+    }
+    if (expression instanceof Expression.Membership membership) {
+      return maxArgumentIndex(membership.value());
+    }
+    if (expression instanceof Expression.TextFunction function) {
+      return Math.max(maxArgumentIndex(function.haystack()), maxArgumentIndex(function.needle()));
+    }
+    if (expression instanceof Expression.Truthy truthy) {
+      return maxArgumentIndex(truthy.operand());
+    }
+    throw new IllegalStateException("unhandled expression " + expression);
+  }
+
+  private static int maxArgumentIndex(final List<Expression> terms) {
+    return terms.stream().mapToInt(SnapshotCompiler::maxArgumentIndex).max().orElse(-1);
   }
 
   private static int maxArgumentIndex(final Operand operand) {
-    return switch (operand) {
-      case Operand.Literal ignored -> -1;
-      case Operand.Reference reference -> argumentIndex(reference.path());
-      case Operand.Size size -> maxArgumentIndex(size.operand());
-      case Operand.Arithmetic arithmetic ->
-          Math.max(maxArgumentIndex(arithmetic.left()), maxArgumentIndex(arithmetic.right()));
-    };
+    if (operand instanceof Operand.Literal) {
+      return -1;
+    }
+    if (operand instanceof Operand.Reference reference) {
+      return argumentIndex(reference.path());
+    }
+    if (operand instanceof Operand.Size size) {
+      return maxArgumentIndex(size.operand());
+    }
+    if (operand instanceof Operand.Arithmetic arithmetic) {
+      return Math.max(maxArgumentIndex(arithmetic.left()), maxArgumentIndex(arithmetic.right()));
+    }
+    throw new IllegalStateException("unhandled operand " + operand);
   }
 }

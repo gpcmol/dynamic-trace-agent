@@ -107,7 +107,7 @@ public final class AttributeValues {
       }
     }
     // An empty collection has no knowable element type (erasure): write nothing.
-    return values.isEmpty() ? null : new ValueList(values.getFirst().getClass(), values);
+    return values.isEmpty() ? null : new ValueList(values.get(0).getClass(), values);
   }
 
   /**
@@ -120,7 +120,7 @@ public final class AttributeValues {
     }
     final Object converted = convertScalar(element);
     if (converted == null
-        || (!values.isEmpty() && values.getFirst().getClass() != converted.getClass())) {
+        || (!values.isEmpty() && values.get(0).getClass() != converted.getClass())) {
       return false;
     }
     values.add(converted);

@@ -44,9 +44,21 @@ on the current span.*
   for the reference rule.
 - **No leaks**: application classloaders stay collectable; proven by tests.
 
+## Compatibility
+
+| | Supported | Tested in CI |
+|---|---|---|
+| Application (runtime) | Java 17 or newer | Java 17 and 21 |
+| OpenTelemetry Java agent | 2.32.0 — pin the agent image, the extension uses agent APIs | 2.32.0 |
+| Building this project | JDK 21 or newer, Maven 3.9 | JDK 21 |
+
+The extension runs inside the application's JVM, so the application's Java version is what counts.
+On Java 16 or older the agent cannot load the extension (`UnsupportedClassVersionError` in the agent
+log) and the application runs without enrichment.
+
 ## Quick start (local)
 
-Requirements: JDK 21, Maven 3.9.
+Requirements: JDK 21 or newer, Maven 3.9 (see [Compatibility](#compatibility)).
 
 ```bash
 mvn -DskipTests package
@@ -71,7 +83,7 @@ application runs.
 ```yaml
 spec:
   java:
-    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.30.0  # pinned
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.32.0  # pinned
     extensions:
       - image: ghcr.io/gpcmol/dynamic-trace-agent:<version>
         dir: /extensions

@@ -15,7 +15,7 @@ spec:
     type: parentbased_traceidratio
     argument: "1"
   java:
-    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.30.0
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.32.0
     extensions:
       - image: ghcr.io/gpcmol/dynamic-trace-agent:snapshot   # use a released X.Y.Z tag in production
         dir: /extensions
