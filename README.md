@@ -48,7 +48,7 @@ on the current span.*
 
 | | Supported | Tested in CI |
 |---|---|---|
-| Application (runtime) | Java 17 or newer | Java 17 and 21 |
+| Application (runtime) | Java 17 or newer | Java 17, 21 and 25 |
 | OpenTelemetry Java agent | 2.32.0 — pin the agent image, the extension uses agent APIs | 2.32.0 |
 | Building this project | JDK 21 or newer, Maven 3.9 | JDK 21 |
 
