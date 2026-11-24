@@ -6,7 +6,8 @@ name: CI
 # agent versions"). The build itself always runs on JDK 21. Branch pushes then publish a snapshot
 # image: every run gets the next patch version (0.1.4-SNAPSHOT, 0.1.5-SNAPSHOT, ...) and the mutable
 # "snapshot" tag moves to it. The release after a merge takes the number of the newest snapshot
-# (release.yml). Pull requests only build the image.
+# (release.yml). Pull requests only build the image. Branch pushes also publish the garage demo
+# image, only as the mutable "snapshot" tag: it is never released.
 
 on:
   workflow_dispatch:
@@ -32,6 +33,7 @@ permissions:
 env:
   IMAGE: ghcr.io/gpcmol/dynamic-trace-agent
   PACKAGE: dynamic-trace-agent
+  APP_IMAGE: ghcr.io/gpcmol/dynamic-trace-app
 
 jobs:
   build:
@@ -47,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           # The last version is the default (JAVA_HOME, build); each one is in JAVA_HOME_<v>_X64.
@@ -131,3 +133,43 @@ jobs:
             ${{ steps.version.outputs.version && format('{0}:{1}', env.IMAGE, steps.version.outputs.version) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The garage demo (dta-example-app), for the Kubernetes example in deploy/kubernetes.
+  app-snapshot-image:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          check-latest: true
+          cache: maven
+
+      # The Dockerfile only copies the jar, so there is nothing to emulate for the other platform.
+      - name: Package the demo application
+        run: mvn -B -q -DskipTests -pl dta-example-app -am package
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build demo image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: dta-example-app/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          tags: ${{ env.APP_IMAGE }}:snapshot

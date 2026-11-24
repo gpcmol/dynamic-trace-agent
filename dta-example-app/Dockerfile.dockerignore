@@ -1,0 +1,4 @@
+# Build context for dta-example-app/Dockerfile: only the application jar. Without this file the
+# root .dockerignore applies, which excludes every target directory.
+*
+!dta-example-app/target/garage.jar
