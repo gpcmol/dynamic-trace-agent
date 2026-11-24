@@ -65,9 +65,10 @@ jobs:
           set -euo pipefail
           # Minimum Temurin patch release per feature release (November 2026 CSPU).
           declare -A MIN=([17]="17.0.21.1" [21]="21.0.13.1" [25]="25.0.5.1")
-          for v in 17 21 25; do
-            var="JAVA_HOME_${v}_X64"; home="${!var:-}"
-            [ -n "$home" ] || continue
+          # Only the JDKs this job uses: the application JDK and the build JDK (21). Other JDKs
+          # preinstalled on the runner are not used and may be older.
+          for v in ${{ matrix.app-java }} 21; do
+            var="JAVA_HOME_${v}_X64"; home="${!var:?JDK $v is not installed}"
             actual="$("$home/bin/java" -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.runtime.version = //p' | sed 's/+.*//; s/-.*//')"
             echo "JDK $v: $actual (minimum ${MIN[$v]})"
             [ "$(printf '%s\n%s\n' "${MIN[$v]}" "$actual" | sort -V | head -n1)" = "${MIN[$v]}" ] \
