@@ -9,8 +9,8 @@ updates:
       - /dta-example-app
     schedule:
       interval: weekly
-    # Stay on the Java LTS line that CI builds and tests with (21): only patch updates. Move to the
-    # next LTS by hand, together with setup-java in the workflows.
+    # Stay on LTS lines: the demo image runs Java 25, the build image Java 21. Only patch updates;
+    # move to the next LTS by hand, together with setup-java in the workflows.
     ignore:
       - dependency-name: eclipse-temurin
         update-types: ["version-update:semver-major"]

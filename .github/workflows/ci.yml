@@ -43,7 +43,7 @@ jobs:
         # in the Instrumentation CR; the extension uses agent-internal APIs (docs/03-classloaders.md).
         otel-agent: ["2.32.0"]
         # Java runtimes of the instrumented application. The extension is compiled for Java 17.
-        app-java: ["17", "21"]
+        app-java: ["17", "21", "25"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -54,7 +54,23 @@ jobs:
           java-version: |
             ${{ matrix.app-java }}
             21
+          # Always take the newest Temurin patch release; the step below enforces the minimum.
+          check-latest: true
           cache: maven
+
+      - name: Require a minimum JDK patch release
+        run: |
+          set -euo pipefail
+          # Minimum Temurin patch release per feature release (November 2026 CSPU).
+          declare -A MIN=([17]="17.0.21.1" [21]="21.0.13.1" [25]="25.0.5.1")
+          for v in 17 21 25; do
+            var="JAVA_HOME_${v}_X64"; home="${!var:-}"
+            [ -n "$home" ] || continue
+            actual="$("$home/bin/java" -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.runtime.version = //p' | sed 's/+.*//; s/-.*//')"
+            echo "JDK $v: $actual (minimum ${MIN[$v]})"
+            [ "$(printf '%s\n%s\n' "${MIN[$v]}" "$actual" | sort -V | head -n1)" = "${MIN[$v]}" ] \
+              || { echo "JDK $v is older than the minimum patch release"; exit 1; }
+          done
 
       - name: Build and test (agent ${{ matrix.otel-agent }}, application on Java ${{ matrix.app-java }})
         run: |
